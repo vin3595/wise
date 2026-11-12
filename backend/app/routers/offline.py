@@ -114,7 +114,7 @@ def _pack(db: Session, device: CounterDevice) -> dict:
                                                       Bill.fy_start == fy)) or 0
     taxes = {t.id: t for t in db.scalars(select(TaxGroup))}
     items = {}
-    for it in db.scalars(select(Item).where(Item.brand_id == outlet.brand_id)):
+    for it in db.scalars(select(Item).where(Item.brand_id == outlet.brand_id, Item.deleted_at.is_(None))):
         tg = taxes.get(it.tax_group_id) if it.tax_group_id else None
         items[str(it.id)] = {"cgst_bp": tg.cgst_bp if tg else 0, "sgst_bp": tg.sgst_bp if tg else 0,
                              "igst_bp": tg.igst_bp if tg else 0, "inclusive": bool(tg and tg.is_inclusive),

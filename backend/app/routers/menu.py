@@ -6,6 +6,7 @@ keep pointing at real rows.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
@@ -179,7 +180,8 @@ def _sync_addon_links(db: Session, item: Item, group_ids: list[uuid.UUID]) -> No
 
 @router.get("/items", response_model=list[ItemOut])
 def list_items(brand_id: uuid.UUID, auth: Auth = Depends(require(Perm.menu_view)), db: Session = Depends(get_db)):
-    items = db.scalars(select(Item).where(Item.brand_id == brand_id).order_by(Item.sort_order, Item.name))
+    items = db.scalars(select(Item).where(Item.brand_id == brand_id, Item.deleted_at.is_(None))
+                       .order_by(Item.sort_order, Item.name))
     return [_item_out(db, i) for i in items]
 
 
@@ -220,6 +222,31 @@ def update_item(item_id: uuid.UUID, body: ItemIn, auth: Auth = Depends(require(P
     out = _item_out(db, item)
     audit.record(db, auth.tenant_id, auth.user_id, "update", "item", item.id, before, out.model_dump(mode="json"))
     return out
+
+
+class ItemIds(BaseModel):
+    item_ids: list[uuid.UUID] = Field(min_length=1, max_length=2000)
+
+
+@router.post("/items/delete")
+def delete_items(body: ItemIds, auth: Auth = Depends(require(Perm.menu_manage)), db: Session = Depends(get_db)) -> dict:
+    """Delete one or many menu items. They leave every menu and the editor; old bills and reports keep
+    their names and figures. Undo with /items/restore."""
+    items = list(db.scalars(select(Item).where(Item.id.in_(body.item_ids), Item.deleted_at.is_(None))))
+    now = datetime.now(timezone.utc)
+    for it in items:
+        it.deleted_at, it.is_active = now, False
+    audit.record(db, auth.tenant_id, auth.user_id, "delete", "item", None, after={"items": [str(i.id) for i in items]})
+    return {"deleted": len(items), "item_ids": [str(i.id) for i in items]}
+
+
+@router.post("/items/restore")
+def restore_items(body: ItemIds, auth: Auth = Depends(require(Perm.menu_manage)), db: Session = Depends(get_db)) -> dict:
+    items = list(db.scalars(select(Item).where(Item.id.in_(body.item_ids), Item.deleted_at.is_not(None))))
+    for it in items:
+        it.deleted_at, it.is_active = None, True
+    audit.record(db, auth.tenant_id, auth.user_id, "restore", "item", None, after={"items": [str(i.id) for i in items]})
+    return {"restored": len(items)}
 
 
 @router.post("/items/prep-area")

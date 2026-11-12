@@ -189,7 +189,6 @@ export function billOffline(p: {
   const s = load();
   const pack = s.pack;
   if (!pack || !s.device_id) throw new Error("This counter wasn't set up for offline billing before the box went down. Bill on paper and enter it later.");
-  if (!p.phone && !p.declined) throw new Error("Ask for the customer's mobile number, or tap No number");
 
   const now = new Date();
   const day = businessDate(now);

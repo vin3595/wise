@@ -67,22 +67,42 @@ function Shell({ children }: { children: ReactNode }) {
   const setupLinks = setup.filter(([, , show]) => show);
   const [showSetup, setShowSetup] = useState(() => { try { return localStorage.getItem("wise.nav_setup") === "1"; } catch { return false; } });
   const onSetup = setupLinks.some(([to]) => location.pathname === to || location.pathname.startsWith(to + "/"));
+  // Phones: the links live in a drawer opened from the top bar; it closes when a page opens.
+  const [drawer, setDrawer] = useState(false);
+  const shown = links.filter(([, , show]) => show);
   return (
     <div className={`shell ${me?.training ? "is-training" : ""}`}>
       {me?.training && <div className="training-bar" role="status">Training: practice only. Nothing here is a real bill, payment, stock or sale.</div>}
       <header className="topbar">
+        {(shown.length > 1 || setupLinks.length > 0) && (
+          <button className="menu-btn" aria-expanded={drawer} aria-controls="app-drawer" onClick={() => setDrawer(!drawer)}>
+            <span aria-hidden>{drawer ? "✕" : "☰"}</span><span className="sr-only">{drawer ? "Close menu" : "Open menu"}</span>
+          </button>
+        )}
         <div className="brand-mark">
           {branding?.logo_url ? <img src={branding.logo_url} alt="" /> : <span className="logo-fallback">{(branding?.app_name || "W")[0]}</span>}
           <strong>{branding?.app_name || "Wise"}</strong>
         </div>
         <div className="topbar-right">
           <InstallApp />
-          <span className="muted">{me?.user.name} · {me?.user.role}</span>
+          <span className="muted who">{me?.user.name} · {me?.user.role}</span>
           <button className="link" onClick={signOut}>Sign out</button>
         </div>
       </header>
+      {drawer && (
+        <div className="drawer-back" onClick={() => setDrawer(false)} onKeyDown={(e) => { if (e.key === "Escape") setDrawer(false); }}>
+          <nav id="app-drawer" className="drawer" aria-label="Menu"
+            onClick={(e) => { e.stopPropagation(); if ((e.target as HTMLElement).closest("a")) setDrawer(false); }}>
+            <p className="drawer-who">{me?.user.name} · {me?.user.role}</p>
+            {shown.map(([to, label]) => <NavLink key={to} to={to} end={to === "/"}>{label}</NavLink>)}
+            {setupLinks.length > 0 && <p className="drawer-head">Setup</p>}
+            {setupLinks.map(([to, label]) => <NavLink key={to} to={to}>{label}</NavLink>)}
+            <button className="link drawer-out" onClick={signOut}>Sign out</button>
+          </nav>
+        </div>
+      )}
       <nav className="nav">
-        {links.filter(([, , show]) => show).map(([to, label]) => (
+        {shown.map(([to, label]) => (
           <NavLink key={to} to={to} end={to === "/"}>{label}</NavLink>
         ))}
         {setupLinks.length > 0 && <button className={`nav-more ${showSetup || onSetup ? "open" : ""}`} aria-expanded={showSetup || onSetup}

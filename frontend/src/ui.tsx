@@ -15,6 +15,17 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   );
 }
 
+/** A labelled group of checkboxes or toggles. Not a <label>: clicking its heading must not tick the first box. */
+export function FieldGroup({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <fieldset className="field field-group">
+      <legend className="field-label">{label}</legend>
+      {children}
+      {hint && <span className="field-hint">{hint}</span>}
+    </fieldset>
+  );
+}
+
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input className="input" {...props} />;
 }

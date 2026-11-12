@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .core.contact import normalize_email, normalize_phone, validate_gstin, validate_hex_color
 from .core.login_id import validate_login_id
@@ -128,6 +128,8 @@ class OutletIn(BaseModel):
     phone: str | None = None
     bill_footer: str | None = Field(default=None, max_length=300)
     car_number_required: bool = False
+    order_types: list[str] = Field(default=["dine_in", "takeaway", "delivery"], min_length=1)
+    default_order_type: str = Field(default="takeaway", pattern=r"^(dine_in|takeaway|delivery)$")
     stock_check_frequency_days: int = Field(default=7, ge=1, le=90)
     upi_vpa: str | None = Field(default=None, max_length=80, pattern=r"^[A-Za-z0-9.\-_]{2,}@[A-Za-z]{2,}$")
     upi_payee_name: str | None = Field(default=None, max_length=60)
@@ -145,6 +147,21 @@ class OutletIn(BaseModel):
     _v_gstin = field_validator("gstin")(lambda v: validate_gstin(v))
     _v_phone = field_validator("phone")(lambda v: v if not v else normalize_phone(v))
 
+    @field_validator("order_types")
+    @classmethod
+    def _types(cls, v: list[str]) -> list[str]:
+        allowed = ["dine_in", "takeaway", "delivery"]
+        bad = [t for t in v if t not in allowed]
+        if bad:
+            raise ValueError(f"Unknown order type: {bad[0]}")
+        return [t for t in allowed if t in v]
+
+    @model_validator(mode="after")
+    def _default_is_on(self) -> "OutletIn":
+        if self.default_order_type not in self.order_types:
+            raise ValueError("The default order type must be one of the outlet's order types")
+        return self
+
 
 class OutletOut(ORM):
     id: uuid.UUID
@@ -158,7 +175,14 @@ class OutletOut(ORM):
     phone: str | None
     bill_footer: str | None
     car_number_required: bool
+    order_types: list[str] = ["dine_in", "takeaway", "delivery"]
+    default_order_type: str = "takeaway"
     stock_check_frequency_days: int
+
+    @field_validator("order_types", mode="before")
+    @classmethod
+    def _split(cls, v: object) -> object:
+        return [t for t in v.split(",") if t] if isinstance(v, str) else v
     upi_vpa: str | None = None
     upi_payee_name: str | None = None
     qr_ordering: bool = False
@@ -646,6 +670,14 @@ class CustomerIn(BaseModel):
 
     _v_phone = field_validator("phone")(lambda v: v if not v else normalize_phone(v))
     _v_gstin = field_validator("gstin")(lambda v: validate_gstin(v))
+
+    @model_validator(mode="after")
+    def _no_number_is_fine(self) -> "CustomerIn":
+        # The mobile number is optional: a bill without one counts as "no number given".
+        if not self.phone:
+            self.phone = None
+            self.declined = True
+        return self
 
 
 class PaymentLineIn(BaseModel):

@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { Brand, Outlet } from "../types";
-import { Button, Card, ErrorText, Field, Input, Select, Toggle, useAction } from "../ui";
+import type { Brand, OrderType, Outlet } from "../types";
+
+const ALL_TYPES: [OrderType, string][] = [["dine_in", "Dine-in"], ["takeaway", "Takeaway"], ["delivery", "Delivery"]];
+import { Button, Card, ErrorText, Field, FieldGroup, Input, Select, Toggle, useAction } from "../ui";
 
 type Form = Omit<Outlet, "id" | "display_key" | "qr_key">;
 
 const empty = (brandId: string): Form => ({
   brand_id: brandId, name: "", code: "", gstin: null, fssai: null, address: null, state_code: "08", phone: null,
-  bill_footer: null, car_number_required: false, stock_check_frequency_days: 7, is_active: true,
+  bill_footer: null, car_number_required: false, order_types: ["dine_in", "takeaway", "delivery"], default_order_type: "takeaway",
+  stock_check_frequency_days: 7, is_active: true,
   upi_vpa: null, upi_payee_name: null, qr_ordering: false, qr_auto_accept: false, kiosk_enabled: false, print_kots: false, table_labels: [],
 });
 
@@ -81,7 +84,26 @@ export default function Outlets() {
               <TablesInput value={f.table_labels || []} onChange={(v) => set("table_labels", v)} />
             </Field>
             <Field label="Bill footer"><Input value={f.bill_footer || ""} onChange={(e) => set("bill_footer", blank(e.target.value))} /></Field>
-            <Toggle checked={f.car_number_required} onChange={(v) => set("car_number_required", v)} label="Car number required on takeaway orders" />
+            <FieldGroup label="Order types this outlet takes" hint="The billing screen shows only these. A delivery-only kitchen can keep just Delivery.">
+              <div className="chips">
+                {ALL_TYPES.map(([t, label]) => (
+                  <Toggle key={t} label={label} checked={(f.order_types || []).includes(t)}
+                    onChange={(on) => {
+                      const next = ALL_TYPES.map(([x]) => x).filter((x) => (x === t ? on : (editing?.form.order_types || []).includes(x)));
+                      if (!next.length) return;
+                      if (editing) setEditing({ ...editing, form: { ...editing.form, order_types: next, default_order_type: next.includes(editing.form.default_order_type) ? editing.form.default_order_type : next[0] } });
+                    }} />
+                ))}
+              </div>
+            </FieldGroup>
+            {(f.order_types || []).length > 1 && (
+              <Field label="Billing screen starts on">
+                <Select value={f.default_order_type} onChange={(e) => set("default_order_type", e.target.value as OrderType)}>
+                  {ALL_TYPES.filter(([t]) => f.order_types.includes(t)).map(([t, label]) => <option key={t} value={t}>{label}</option>)}
+                </Select>
+              </Field>
+            )}
+            {(f.order_types || []).includes("takeaway") && <Toggle checked={f.car_number_required} onChange={(v) => set("car_number_required", v)} label="Car number required on takeaway orders" />}
             <Toggle checked={f.qr_ordering} onChange={(v) => set("qr_ordering", v)} label="Customers can order by scanning the table QR" />
             {f.qr_ordering && <Toggle checked={f.qr_auto_accept} onChange={(v) => set("qr_auto_accept", v)} label="Send QR orders to the kitchen without staff accepting" />}
             <Toggle checked={f.kiosk_enabled} onChange={(v) => set("kiosk_enabled", v)} label="Self-order kiosk (touch screen)" />

@@ -35,7 +35,7 @@ def build_outlet_menu(db: Session, outlet: Outlet, include_unavailable: bool = F
     for link in db.scalars(select(ItemAddonGroup)):
         links.setdefault(link.item_id, []).append(link.group_id)
     items_out: list[OutletMenuItem] = []
-    for item in db.scalars(select(Item).where(Item.brand_id == outlet.brand_id).order_by(Item.sort_order, Item.name)):
+    for item in db.scalars(select(Item).where(Item.brand_id == outlet.brand_id, Item.deleted_at.is_(None)).order_by(Item.sort_order, Item.name)):
         variants = []
         for v in db.scalars(select(Variant).where(Variant.item_id == item.id).order_by(Variant.sort_order)):
             ov = overrides.get(v.id)

@@ -86,6 +86,9 @@ def create_order(body: OrderCreate, auth: Auth = Depends(require(Perm.kot_send))
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from None
     if body.order_type == "takeaway" and outlet.car_number_required and not car:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Enter the car number for this takeaway order")
+    if body.order_type not in (outlet.order_types or "dine_in,takeaway,delivery").split(","):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "This outlet doesn't take that kind of order. Change it under Outlets.")
     if body.order_type == "dine_in" and not (body.table_label or "").strip():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Pick a table for dine-in orders")
 

@@ -94,6 +94,12 @@ class Outlet(Base, Timestamps):
     upi_vpa: Mapped[str | None] = mapped_column(String(80))        # e.g. shakewallah@okaxis, for the bill QR
     upi_payee_name: Mapped[str | None] = mapped_column(String(60))
     car_number_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Which order types this outlet takes (a delivery-only kitchen, a dine-in cafe...) and which one the
+    # billing screen starts on.
+    order_types: Mapped[str] = mapped_column(String(40), default="dine_in,takeaway,delivery",
+                                             server_default="dine_in,takeaway,delivery", nullable=False)
+    default_order_type: Mapped[str] = mapped_column(String(10), default="takeaway", server_default="takeaway",
+                                                    nullable=False)
     # QR ordering: customers scan /q/<qr_key>?t=<table>. Orders wait for staff to accept unless auto-accept is on.
     qr_key: Mapped[str] = mapped_column(String(32), unique=True, nullable=False,
                                         default=lambda: secrets.token_urlsafe(12))
@@ -240,6 +246,8 @@ class Item(Base, Timestamps):
     tax_group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("tax_groups.id"))
     # Which preparation area makes it: decides which KOT / KDS screen the item goes to.
     prep_area_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("prep_areas.id"))
+    # Deleted items leave every menu and the menu editor; old bills and reports still show them.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     description: Mapped[str | None] = mapped_column(Text)
     image_url: Mapped[str | None] = mapped_column(String(500))
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

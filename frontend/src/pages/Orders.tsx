@@ -79,6 +79,10 @@ export default function Orders() {
   const { busy, error, setError, run } = useAction();
 
   const outlet = outlets.find((o) => o.id === outletId);
+  // The outlet decides which order types the counter takes and which one each new order starts on.
+  const allowedTypes: OrderType[] = outlet?.order_types?.length ? outlet.order_types : ["dine_in", "takeaway", "delivery"];
+  const startType: OrderType = outlet && allowedTypes.includes(outlet.default_order_type) ? outlet.default_order_type : allowedTypes.includes("takeaway") ? "takeaway" : allowedTypes[0];
+  useEffect(() => { setOrderType(startType); }, [outletId, startType]);
   const catColor = (id: string) => menu?.categories.find((c) => c.id === id)?.color || null;
   const canBill = can("billing") && !addingTo;
 
@@ -162,7 +166,7 @@ export default function Orders() {
   const count = cart.reduce((s, l) => s + l.qty, 0);
 
   function resetCart() {
-    setCart([]); setTable(""); setCar(""); setCustomer(""); setNotes(""); setPhone(""); setDeclined(false);
+    setCart([]); setTable(""); setCar(""); setCustomer(""); setNotes(""); setPhone(""); setDeclined(false); setOrderType(startType);
     setAddingTo(null); setPayMode(null); setTendered(""); setRefresh((n) => n + 1); setLoy({ points_paise: 0, use_reward: false }); setLoyAmount(0);
   }
 
@@ -193,7 +197,6 @@ export default function Orders() {
   }
 
   function settle(mode: PayMode) {
-    if (!phone && !declined) { setError("Ask for the customer's mobile number, or tap No number"); return; }
     if (orderType === "dine_in" && !table && !off.online) { setError("Pick a table for dine-in orders"); return; }
     if (!off.online) { run(async () => settleOffline(mode, null)); return; }
     run(async () => {
@@ -225,7 +228,6 @@ export default function Orders() {
   }
   /** UPI that confirms itself: send the order, show this bill's own QR, the bill prints when the money lands. */
   function upiAutoPay() {
-    if (!phone && !declined) { setError("Ask for the customer's mobile number, or tap No number"); return; }
     run(async () => {
       const order = await placeOrder();
       setSent(order);
@@ -242,7 +244,6 @@ export default function Orders() {
   }
   /** Card machine linked: send the order, push the amount to this counter's machine, bill when approved. */
   function cardAutoPay(existing?: Order) {
-    if (!phone && !declined && !existing) { setError("Ask for the customer's mobile number, or tap No number"); return; }
     run(async () => {
       const order = existing ?? (await placeOrder());
       if (!existing) setSent(order);
@@ -378,16 +379,22 @@ export default function Orders() {
         </div>
       </div>
 
+      {cart.length > 0 && (
+        <button className="cart-jump" onClick={() => document.querySelector(".pos-cart")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+          <span>{count} item{count === 1 ? "" : "s"}</span><strong>{formatPaise(total)}</strong><span>View bill ↓</span>
+        </button>
+      )}
       <aside className="pos-cart">
         {addingTo ? (
           <div className="banner">Adding to token #{addingTo.token_no}{addingTo.table_label ? `, table ${addingTo.table_label}` : ""} <button className="link" onClick={() => setAddingTo(null)}>Cancel</button></div>
         ) : (
           <>
-            <div className="seg">
-              {(["dine_in", "takeaway", "delivery"] as OrderType[]).map((t) => (
+            {allowedTypes.length > 1 && <div className="seg">
+              {allowedTypes.map((t) => (
                 <button key={t} className={orderType === t ? "active" : ""} onClick={() => setOrderType(t)}>{ORDER_TYPE_LABEL[t]}</button>
               ))}
-            </div>
+            </div>}
+            {allowedTypes.length === 1 && <p className="small muted only-type">{ORDER_TYPE_LABEL[allowedTypes[0]]} orders</p>}
             <div className="cart-meta">
               {orderType === "dine_in" && <Input placeholder="Table, e.g. T4" value={table} onChange={(e) => setTable(e.target.value.toUpperCase())} />}
               {orderType === "takeaway" && (
@@ -424,13 +431,15 @@ export default function Orders() {
         {canBill && cart.length > 0 && (
           <div className="quickpay">
             <div className="cust-row">
-              {!declined && <Input inputMode="tel" placeholder="Customer mobile" value={phone} onChange={(e) => setPhone(e.target.value)} />}
-              <button className={`choice ${declined ? "on" : ""}`} onClick={() => setDeclined(!declined)}>{declined ? "No number ✓" : "No number"}</button>
+              <Input inputMode="tel" placeholder="Customer mobile (optional)" aria-label="Customer mobile, optional" value={phone} onChange={(e) => setPhone(e.target.value)} />
             </div>
             {screenOn
-              ? (!declined && !cleanMobile(phone) && (asking
+              ? (!cleanMobile(phone) && (asking
                   ? <p className="muted small cs-status"><span className="dot-pulse" aria-hidden /> Customer is typing on their screen… <button className="link" onClick={() => setAsking(false)}>Stop</button></p>
-                  : <button className="choice cs-ask" onClick={() => { setError(null); setAsking(true); }}>Ask customer on their screen</button>))
+                  : <>
+                      {declined && <p className="muted small cs-status">Customer skipped the number.</p>}
+                      <button className="choice cs-ask" onClick={() => { setError(null); setDeclined(false); setAsking(true); }}>{declined ? "Ask again on their screen" : "Ask customer on their screen"}</button>
+                    </>))
               : <button className="link small" onClick={openCustomerScreen}>Open customer screen</button>}
             {!declined && off.online && <LoyaltyBox phone={phone} gross={subtotal} value={loy} onInfo={(l) => { rewardOf.current = l ? l.reward_paise : 0; }} onChange={(u) => {
               setLoy(u);

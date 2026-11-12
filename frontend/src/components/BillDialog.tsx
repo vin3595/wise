@@ -79,7 +79,6 @@ export default function BillDialog({ order, outlet, onClose, onBilled, upiAuto, 
 
   /** UPI that confirms itself: this bill's own QR (on screen or printed); the bill is made when the money lands. */
   const upiQr = () => save.run(async () => {
-    if (!phone && !declined) throw new Error("Ask for the customer's mobile number, or tap No number");
     const r = await api<UpiReq>("/upi/requests", { body: { order_id: order.id, bill_id: billId,
       loyalty: usingLoyalty ? { ...loy, phone } : null, customer: { name: name || null, phone: declined ? null : phone, declined } } });
     onUpiRequest?.(r);
@@ -124,9 +123,9 @@ export default function BillDialog({ order, outlet, onClose, onBilled, upiAuto, 
           </div>
           <div>
             <h3>Customer</h3>
-            {!declined && <Input inputMode="tel" placeholder="Mobile number" value={phone} onChange={(e) => setPhone(e.target.value)} />}
+            {!declined && <Input inputMode="tel" placeholder="Mobile number (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />}
             <div className="row">
-              <label className="toggle"><input type="checkbox" checked={declined} onChange={(e) => setDeclined(e.target.checked)} /> Customer won't share number</label>
+              
               <button className="link" onClick={() => setShowGst(!showGst)}>{showGst ? "No GST bill" : "Business GST bill"}</button>
             </div>
             <Input placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} />

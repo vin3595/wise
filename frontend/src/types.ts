@@ -74,6 +74,8 @@ export interface Outlet {
   phone: string | null;
   bill_footer: string | null;
   car_number_required: boolean;
+  order_types: OrderType[];
+  default_order_type: OrderType;
   stock_check_frequency_days: number;
   is_active: boolean;
   display_key: string;

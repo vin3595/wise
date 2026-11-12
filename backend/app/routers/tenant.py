@@ -113,7 +113,8 @@ def list_outlets(auth: Auth = Depends(get_auth), db: Session = Depends(get_db)) 
 def create_outlet(body: OutletIn, auth: Auth = Depends(require(Perm.outlets_manage)),
                   db: Session = Depends(get_db)) -> Outlet:
     get_or_404(db, Brand, body.brand_id, "Brand")
-    outlet = Outlet(tenant_id=auth.tenant_id, **body.model_dump())
+    data = body.model_dump(); data["order_types"] = ",".join(data["order_types"])
+    outlet = Outlet(tenant_id=auth.tenant_id, **data)
     if outlet.print_kots:
         outlet.print_since = datetime.now(timezone.utc)
     db.add(outlet)
@@ -131,7 +132,8 @@ def update_outlet(outlet_id: uuid.UUID, body: OutletIn, auth: Auth = Depends(req
     if body.print_kots and not outlet.print_kots:
         # Turning printing on prints new KOTs only, not the whole day's backlog.
         outlet.print_since = datetime.now(timezone.utc)
-    for key, value in body.model_dump().items():
+    data = body.model_dump(); data["order_types"] = ",".join(data["order_types"])
+    for key, value in data.items():
         setattr(outlet, key, value)
     db.flush()
     audit.record(db, auth.tenant_id, auth.user_id, "update", "outlet", outlet.id, before, audit.snapshot(outlet))

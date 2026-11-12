@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { formatPaise, inputToPaise, paiseToInput } from "../money";
 import type { AddonGroup, Brand, BrandMenu, Category, FoodType, Item } from "../types";
-import { Button, Card, ErrorText, Field, FoodDot, Input, Select, Toggle, useAction } from "../ui";
+import { Button, Card, ErrorText, Field, FieldGroup, FoodDot, Input, Select, Toggle, useAction } from "../ui";
 import { ItemArt } from "../art";
 
 export default function MenuEditor() {
@@ -13,6 +13,11 @@ export default function MenuEditor() {
   const [catId, setCatId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Item | "new" | null>(null);
   const [search, setSearch] = useState("");
+  // Delete: tick items (or tap Delete on one), confirm, and get an Undo for the last delete.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [confirmDel, setConfirmDel] = useState<string[] | null>(null);
+  const [undo, setUndo] = useState<{ ids: string[]; label: string } | null>(null);
+  const del = useAction();
 
   useEffect(() => {
     api<Brand[]>("/tenant/brands").then((b) => { setBrands(b); if (b[0]) setBrandId(b[0].id); });
@@ -31,6 +36,17 @@ export default function MenuEditor() {
     const q = search.trim().toLowerCase();
     return menu.items.filter((i) => q ? i.name.toLowerCase().includes(q) || (i.short_code || "").toLowerCase().includes(q) : i.category_id === catId);
   }, [menu, catId, search]);
+  useEffect(() => { setPicked(new Set()); }, [catId, search]);
+  const nameOf = (id: string) => menu?.items.find((i) => i.id === id)?.name || "item";
+  const doDelete = (ids: string[]) => del.run(async () => {
+    await api("/menu/items/delete", { body: { item_ids: ids } });
+    setUndo({ ids, label: ids.length === 1 ? nameOf(ids[0]) : `${ids.length} items` });
+    setConfirmDel(null); setPicked(new Set()); if (editing && editing !== "new" && ids.includes(editing.id)) setEditing(null);
+    setMenu((m) => m && { ...m, items: m.items.filter((i) => !ids.includes(i.id)) });
+    await load();
+  });
+  const doUndo = () => undo && del.run(async () => { await api("/menu/items/restore", { body: { item_ids: undo.ids } }); setUndo(null); await load(); });
+  const allPicked = items.length > 0 && items.every((i) => picked.has(i.id));
 
   return (
     <div className="stack">
@@ -65,18 +81,49 @@ export default function MenuEditor() {
                 onDone={async () => { setEditing(null); await load(); }}
               />
             )}
+            {undo && (
+              <div className="banner info undo-bar" role="status">
+                Deleted {undo.label}. Old bills and reports still show it.
+                <button className="link" disabled={del.busy} onClick={doUndo}>Undo</button>
+                <button className="link" onClick={() => setUndo(null)}>Dismiss</button>
+              </div>
+            )}
+            {confirmDel && (
+              <div className="banner warn confirm-del" role="alertdialog" aria-label="Delete items">
+                <p><strong>Delete {confirmDel.length === 1 ? nameOf(confirmDel[0]) : `${confirmDel.length} items`}?</strong> {confirmDel.length === 1 ? "It leaves" : "They leave"} every outlet's menu, the counter, QR and kiosk. Old bills and reports keep {confirmDel.length === 1 ? "it" : "them"}, and you can undo right after.</p>
+                <div className="row">
+                  <Button variant="danger" disabled={del.busy} onClick={() => doDelete(confirmDel)}>Delete {confirmDel.length === 1 ? "item" : `${confirmDel.length} items`}</Button>
+                  <Button variant="ghost" onClick={() => setConfirmDel(null)}>Keep</Button>
+                </div>
+              </div>
+            )}
+            <ErrorText error={del.error} />
+            {picked.size > 0 && !confirmDel && (
+              <div className="row pick-bar">
+                <span><strong>{picked.size}</strong> selected</span>
+                <Button variant="danger" onClick={() => setConfirmDel([...picked])}>Delete selected</Button>
+                <button className="link" onClick={() => setPicked(new Set())}>Clear</button>
+              </div>
+            )}
             <Card>
               {items.length === 0 ? <p className="muted">{search ? "No matching items." : "No items in this category yet."}</p> : (
                 <table className="table">
-                  <thead><tr><th>Item</th><th>Code</th><th>Prep area</th><th>Variants</th><th /></tr></thead>
+                  <thead><tr>
+                    <th className="pick"><input type="checkbox" aria-label="Select all items shown" checked={allPicked}
+                      onChange={(e) => setPicked(e.target.checked ? new Set(items.map((i) => i.id)) : new Set())} /></th>
+                    <th>Item</th><th className="hide-sm">Code</th><th className="hide-sm">Prep area</th><th>Variants</th><th />
+                  </tr></thead>
                   <tbody>
                     {items.map((i) => (
-                      <tr key={i.id} className={i.is_active ? "" : "inactive"}>
+                      <tr key={i.id} className={`${i.is_active ? "" : "inactive"} ${picked.has(i.id) ? "picked" : ""}`}>
+                        <td className="pick"><input type="checkbox" aria-label={`Select ${i.name}`} checked={picked.has(i.id)}
+                          onChange={(e) => { const n = new Set(picked); if (e.target.checked) n.add(i.id); else n.delete(i.id); setPicked(n); }} /></td>
                         <td><FoodDot type={i.food_type} /> {i.name}</td>
-                        <td>{i.short_code || "—"}</td>
-                        <td>{(menu.prep_areas || []).find((a) => a.id === i.prep_area_id)?.name || "Kitchen"}</td>
-                        <td>{i.variants.filter((v) => v.is_active).map((v) => `${v.name} ${formatPaise(v.price_paise)}`).join(" · ")}</td>
-                        <td><button className="link" onClick={() => setEditing(i)}>Edit</button></td>
+                        <td className="hide-sm">{i.short_code || "—"}</td>
+                        <td className="hide-sm">{(menu.prep_areas || []).find((a) => a.id === i.prep_area_id)?.name || "Kitchen"}</td>
+                        <td className="wrap">{i.variants.filter((v) => v.is_active).map((v) => `${v.name} ${formatPaise(v.price_paise)}`).join(" · ")}</td>
+                        <td className="actions"><button className="link" onClick={() => setEditing(i)}>Edit</button>
+                          <button className="link danger" onClick={() => setConfirmDel([i.id])}>Delete</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -214,14 +261,14 @@ function ItemForm({ menu, brandId, item, defaultCategory, onDone }: {
         <button type="button" className="link" onClick={() => setVariants([...variants, { name: "", price: "", is_active: true }])}>+ Add variant</button>
 
         {menu.addon_groups.length > 0 && (
-          <Field label="Add-on groups">
+          <FieldGroup label="Add-on groups">
             <div className="chips">
               {menu.addon_groups.map((g) => (
                 <Toggle key={g.id} label={g.name} checked={f.addon_group_ids.includes(g.id)}
                   onChange={(on) => setF({ ...f, addon_group_ids: on ? [...f.addon_group_ids, g.id] : f.addon_group_ids.filter((x) => x !== g.id) })} />
               ))}
             </div>
-          </Field>
+          </FieldGroup>
         )}
         <Toggle checked={f.is_active} onChange={(v) => setF({ ...f, is_active: v })} label="On the menu" />
         <ErrorText error={error} />

@@ -92,6 +92,7 @@ def import_menu(brand_id: uuid.UUID, dry_run: bool = Query(default=True), file: 
                 if v is not None:
                     setattr(item, k, v)
             item.is_active = True
+            item.deleted_at = None   # importing a deleted item's name brings it back
             updated["items"] += 1
         existing = {v.name.lower(): v for v in db.scalars(select(Variant).where(Variant.item_id == item.id))}
         for order, pv in enumerate(pi.variants):
