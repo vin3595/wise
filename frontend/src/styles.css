@@ -570,7 +570,13 @@ body.screen-dark .powered { color: #6f6684; }
 .rep-table th.num button { text-align: right; }
 .rep-table tbody tr:hover td { background: var(--bg); }
 .rep-table tfoot td { position: sticky; bottom: 0; background: #f0edf7; font-weight: 800; border-top: 1.5px solid var(--line-2); }
-@media (max-width: 860px) { .rep { grid-template-columns: 1fr; } .rep-nav { position: static; max-height: none; } .stat-wide { grid-column: auto; } }
+.rep-pick { display: none; }
+@media (max-width: 860px) {
+  .rep { grid-template-columns: 1fr; } .stat-wide { grid-column: auto; }
+  .rep-nav { display: none; }
+  .rep-pick { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.8rem; font-weight: 600; font-size: 0.9rem; }
+  .rep-pick select { width: 100%; font-size: 1rem; }
+}
 
 /* ---------------------------------------------------------- SMS */
 .sms-kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.8rem; margin: 0.6rem 0; }

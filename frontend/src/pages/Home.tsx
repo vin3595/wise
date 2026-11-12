@@ -40,7 +40,7 @@ function TodayCard() {
 }
 
 export default function Home() {
-  const { me, can, branding } = useSession();
+  const { me, can } = useSession();
   if (!me) return null;
   const trialDays = me.tenant.trial_ends_at
     ? Math.max(0, Math.ceil((new Date(me.tenant.trial_ends_at).getTime() - Date.now()) / 86400000))
@@ -53,29 +53,8 @@ export default function Home() {
       )}
       {me.tenant.status === "read_only" && <div className="banner warn">Subscription expired. The app is read-only.</div>}
       {can("reports.view") && <TodayCard />}
-      {can("approve") && <OwnerAlerts />}
-      <CashAlerts />
-      {can("tenant.settings") && (
-        <Card title="Get your restaurant ready">
-          <ol className="linklist numbered">
-            <li><Link to="/branding">Upload your logo and pick your colour</Link></li>
-            <li><Link to="/outlets">Add your outlets</Link></li>
-            <li><Link to="/menu/import">Import your menu from Excel</Link> or <Link to="/menu">build it here</Link></li>
-            <li><Link to="/kitchen">Set up preparation areas</Link> (Shake counter, Kitchen…) and the customer screen link</li>
-            <li><Link to="/users">Add staff and give them PINs</Link></li>
-          </ol>
-          <p className="muted small">
-            Your app address: <strong>{branding?.login_id}</strong> (staff enter this once on each device).
-          </p>
-        </Card>
-      )}
-      <Card title="Run service">
-        <ul className="linklist">
-          <li><Link to="/orders">Orders</Link>: take dine-in, takeaway (with car number) and delivery orders and send KOTs</li>
-          <li><Link to="/kds">Kitchen display</Link>: each preparation area sees and updates its own tickets</li>
-          <li><Link to="/kitchen">Customer screen</Link>: open the outlet's display link on the counter TV</li>
-        </ul>
-      </Card>
+      {can("approve") && <OwnerAlerts quietWhenEmpty={false} />}
+      <CashAlerts onHome />
     </div>
   );
 }

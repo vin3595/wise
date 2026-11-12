@@ -163,6 +163,17 @@ export default function Reports() {
           ))}
         </nav>
         <section className="rep-main">
+          {/* Phones: one grouped picker instead of the long list. */}
+          <label className="rep-pick">
+            <span>Report</span>
+            <Select value={name} onChange={(e) => { setName(e.target.value); setFind(""); }}>
+              {Object.entries(groups).map(([g, items]) => (
+                <optgroup key={g} label={g}>
+                  {items.map((r) => <option key={r.name} value={r.name}>{r.label}</option>)}
+                </optgroup>
+              ))}
+            </Select>
+          </label>
           {table && (
             <>
               <div className="rep-head">

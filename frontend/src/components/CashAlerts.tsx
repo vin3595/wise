@@ -12,7 +12,7 @@ const denomText = (d: Record<string, number> | null) => !d ? "Total typed in, no
     .map(([k, n]) => `${n} × ₹${k.slice(1)}${k[0] === "c" ? " coin" : ""}`).join(", ");
 
 /** Cash counts that didn't match what the system expected. Managers check each one and note why. */
-export default function CashAlerts() {
+export default function CashAlerts({ onHome = false }: { onHome?: boolean }) {
   const { can } = useSession();
   const [alerts, setAlerts] = useState<Alert[] | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -24,6 +24,7 @@ export default function CashAlerts() {
     api<{ tolerance_paise: number }>("/tenant/cash-tolerance").then((t) => setTol(paiseToInput(t.tolerance_paise))).catch(() => {});
   }, []);
   if (!can("reports.view") || alerts === null) return null;
+  if (onHome && alerts.length === 0) return null;
   return (
     <Card title={alerts.length ? `Cash to check (${alerts.length})` : "Cash counts"}>
       {alerts.length === 0 && <p className="muted">Every cash count matched. Each shift opens with what the last close left in the drawer; if a cashier's count is different, it shows here and you get an SMS.</p>}
@@ -46,7 +47,7 @@ export default function CashAlerts() {
           </li>
         ))}
       </ul>
-      {can("tenant.settings") && (
+      {can("tenant.settings") && !onHome && (
         <div className="row small">
           <span>Don't alert for differences up to ₹</span>
           <Input className="input price" inputMode="decimal" value={tol} onChange={(e) => setTol(e.target.value)} />

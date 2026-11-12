@@ -34,6 +34,7 @@ import Accounts from "./pages/Accounts";
 import Access from "./pages/Access";
 import Cash from "./pages/Cash";
 import Reports from "./pages/Reports";
+import GettingStarted from "./pages/GettingStarted";
 
 function Shell({ children }: { children: ReactNode }) {
   const { branding, me, can, signOut } = useSession();
@@ -52,6 +53,7 @@ function Shell({ children }: { children: ReactNode }) {
   ];
   // Set-up pages live on a second row, opened with "Setup", so the daily screens stay one tap away.
   const setup: [string, string, boolean, string][] = [
+    ["/start", "Getting started", can("tenant.settings"), "Start here"],
     ["/menu", "Menu", can("menu.manage"), "Menu and tax"],
     ["/outlet-menu", "Outlet menu", can("menu.override"), "Menu and tax"],
     ["/tax", "Tax", can("menu.manage"), "Menu and tax"],
@@ -211,6 +213,7 @@ export default function App() {
         <Route path="/outlets" element={<Outlets />} />
         <Route path="/users" element={<Users />} />
         <Route path="/branding" element={<Branding />} />
+        <Route path="/start" element={<GettingStarted />} />
         <Route path="/sms" element={<Sms />} />
         <Route path="/payments" element={<Payments />} />
         <Route path="/screen-ads" element={<ScreenAds />} />

@@ -8,10 +8,13 @@ const KIND: Record<string, string> = { cancel: "Bill cancelled", discount: "Big 
   cash: "Cash doesn't match", printer: "Printer", box: "Box was off" };
 
 /** The last week's alerts for the owner/manager: the same ones that go by SMS. */
-export default function OwnerAlerts() {
+export default function OwnerAlerts({ quietWhenEmpty = true }: { quietWhenEmpty?: boolean }) {
   const [data, setData] = useState<{ unseen: number; alerts: Alert[] } | null>(null);
   usePolling(async () => setData(await api(`/alerts`)), 60000, [], { topics: ["alerts"] });
-  if (!data || data.alerts.length === 0) return null;
+  if (!data) return null;
+  if (data.alerts.length === 0) return quietWhenEmpty ? null : (
+    <Card title="Alerts"><p className="muted">No alerts this week. Cancelled bills, big discounts, cash differences and printer problems show here.</p></Card>
+  );
   return (
     <Card title={`Alerts${data.unseen ? ` (${data.unseen} new)` : ""}`}>
       <ul className="owner-alerts">

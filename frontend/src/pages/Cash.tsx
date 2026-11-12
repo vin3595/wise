@@ -1,3 +1,4 @@
+import CashAlerts from "../components/CashAlerts";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usePolling } from "../hooks";
@@ -39,6 +40,7 @@ export default function Cash() {
         {!me?.outlet_id && outlets.length > 1 && <Select value={outletId} onChange={(e) => setOutletId(e.target.value)} aria-label="Outlet">{outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select>}
         <Input type="date" value={day} max={today()} onChange={(e) => setDay(e.target.value)} aria-label="Day" />
       </div>
+      {can("reports.view") && <CashAlerts />}
       <div className="stats">
         <div className="stat"><span>Shifts open now</span><strong>{open.length}</strong></div>
         <div className="stat"><span>Opening cash</span><strong>{formatPaise(sum((s) => s.opening_cash_paise))}</strong></div>
