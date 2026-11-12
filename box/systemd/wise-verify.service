@@ -1,0 +1,6 @@
+[Unit]
+Description=Wise Box weekly backup restore test
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '/usr/local/bin/wise verify-backup || /usr/local/bin/wise alerts-notify "Backup check failed" "The latest backup could not be restored in the weekly test. Run: sudo wise verify-backup"'

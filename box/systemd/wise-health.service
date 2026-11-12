@@ -1,0 +1,6 @@
+[Unit]
+Description=Wise Box health check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/wise health

@@ -1,0 +1,90 @@
+# Wise Box: everything one restaurant needs, on one small computer in the restaurant.
+# Managed with the `wise` command (sudo wise status | backup | update ...). Settings live in /opt/wise/.env.
+name: wise
+
+x-logs: &logs
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      WISE_OWNER_PASSWORD: ${WISE_OWNER_PASSWORD}
+      WISE_APP_PASSWORD: ${WISE_APP_PASSWORD}
+      TZ: Asia/Kolkata
+    volumes:
+      - ${WISE_DATA:-/opt/wise/data}/postgres:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    # Sized for one restaurant with room to spare (about 15 devices); fine up to 8 GB RAM boxes.
+    command: >
+      postgres -c shared_buffers=1GB -c effective_cache_size=3GB -c work_mem=16MB
+               -c max_connections=100 -c wal_compression=on -c checkpoint_timeout=10min
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wise"]
+      interval: 5s
+      retries: 30
+    <<: *logs
+
+  api:
+    image: wise-api:${WISE_VERSION:-local}
+    build: ${WISE_SRC:-..}/backend
+    restart: unless-stopped
+    environment:
+      WISE_DATABASE_URL: postgresql+psycopg://wise_app:${WISE_APP_PASSWORD}@db:5432/wise
+      WISE_MIGRATE_DATABASE_URL: postgresql+psycopg://wise_owner:${WISE_OWNER_PASSWORD}@db:5432/wise
+      WISE_JWT_SECRET: ${WISE_JWT_SECRET}
+      WISE_OTP_PROVIDER: ${WISE_OTP_PROVIDER:-box}
+      WISE_WORKERS: ${WISE_WORKERS:-2}
+      WISE_SIGNUP_MODE: ${WISE_SIGNUP_MODE:-first}
+      WISE_MSG91_AUTH_KEY: ${WISE_MSG91_AUTH_KEY:-}
+      WISE_MSG91_TEMPLATE_ID: ${WISE_MSG91_TEMPLATE_ID:-}
+      WISE_CUSTOMER_URL: ${WISE_CUSTOMER_URL:-}
+      WISE_CORS_ORIGINS: ${WISE_CUSTOMER_URL:-http://localhost}
+      WISE_UPLOAD_DIR: /app/uploads
+      TZ: Asia/Kolkata
+    volumes:
+      - ${WISE_DATA:-/opt/wise/data}/uploads:/app/uploads
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).status == 200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 40s
+    <<: *logs
+
+  web:
+    image: wise-web:${WISE_VERSION:-local}
+    build: ${WISE_SRC:-..}/frontend
+    restart: unless-stopped
+    ports: ["${WISE_HTTP_PORT:-80}:80"]   # staff devices open http://<box address> on the shop Wi-Fi
+    depends_on: [api]
+    <<: *logs
+
+  printer:
+    image: wise-printer:${WISE_VERSION:-local}
+    build: ${WISE_SRC:-..}/print-bridge
+    restart: unless-stopped
+    environment:
+      WISE_SERVER: http://api:8000
+      WISE_PRINT_KEY: ${WISE_PRINT_KEY:-}
+      TZ: Asia/Kolkata
+    depends_on: [api]
+    <<: *logs
+
+  # Public HTTPS address for QR orders and for opening Wise away from the shop. Only runs when a
+  # Cloudflare tunnel token is set (sudo wise tunnel <token>). No open router ports, no static IP.
+  tunnel:
+    image: cloudflare/cloudflared:2025.10.0
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on: [web]
+    <<: *logs

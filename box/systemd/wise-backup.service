@@ -1,0 +1,8 @@
+[Unit]
+Description=Wise Box nightly encrypted backup
+After=wise.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/wise backup
+Nice=10

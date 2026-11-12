@@ -1,0 +1,81 @@
+# Wise on AWS: one EC2 server runs the app; the database is Amazon RDS (or, with the "localdb"
+# profile, a Postgres container on the same server). Caddy gets the HTTPS certificate by itself.
+# Managed with the `wise-cloud` command. Settings live in /opt/wise/.env.
+name: wise
+
+x-logs: &logs
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
+services:
+  db:
+    image: postgres:16
+    profiles: ["localdb"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      WISE_OWNER_PASSWORD: ${WISE_OWNER_PASSWORD}
+      WISE_APP_PASSWORD: ${WISE_APP_PASSWORD}
+      TZ: Asia/Kolkata
+    volumes:
+      - /opt/wise/data/postgres:/var/lib/postgresql/data
+      - ../../box/initdb:/docker-entrypoint-initdb.d:ro
+    command: postgres -c shared_buffers=512MB -c max_connections=100 -c wal_compression=on
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wise"]
+      interval: 5s
+      retries: 30
+    <<: *logs
+
+  api:
+    image: wise-api:${WISE_VERSION:-local}
+    build: ../../backend
+    restart: unless-stopped
+    environment:
+      WISE_DATABASE_URL: postgresql+psycopg://wise_app:${WISE_APP_PASSWORD}@${WISE_DB_HOST}:5432/wise?sslmode=${WISE_DB_SSL:-require}
+      WISE_MIGRATE_DATABASE_URL: postgresql+psycopg://wise_owner:${WISE_OWNER_PASSWORD}@${WISE_DB_HOST}:5432/wise?sslmode=${WISE_DB_SSL:-require}
+      WISE_JWT_SECRET: ${WISE_JWT_SECRET}
+      WISE_OTP_PROVIDER: ${WISE_OTP_PROVIDER:-box}
+      WISE_SIGNUP_MODE: ${WISE_SIGNUP_MODE:-first}
+      WISE_WORKERS: ${WISE_WORKERS:-2}
+      WISE_MSG91_AUTH_KEY: ${WISE_MSG91_AUTH_KEY:-}
+      WISE_MSG91_TEMPLATE_ID: ${WISE_MSG91_TEMPLATE_ID:-}
+      WISE_FAST2SMS_API_KEY: ${WISE_FAST2SMS_API_KEY:-}
+      WISE_PUBLIC_BASE_URL: https://${WISE_DOMAIN}
+      WISE_CUSTOMER_URL: https://${WISE_DOMAIN}
+      WISE_CORS_ORIGINS: https://${WISE_DOMAIN}
+      WISE_BASE_DOMAIN: ${WISE_DOMAIN}
+      WISE_UPLOAD_DIR: /app/uploads
+      TZ: Asia/Kolkata
+    volumes:
+      - /opt/wise/data/uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).status == 200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 40s
+    <<: *logs
+
+  web:
+    image: wise-web:${WISE_VERSION:-local}
+    build: ../../frontend
+    restart: unless-stopped
+    depends_on: [api]
+    <<: *logs
+
+  # The only service open to the internet: ports 80 and 443. Certificates come from Let's Encrypt
+  # and renew by themselves.
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      WISE_DOMAIN: ${WISE_DOMAIN}
+      WISE_ADMIN_EMAIL: ${WISE_ADMIN_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/wise/data/caddy:/data
+    depends_on: [web]
+    <<: *logs

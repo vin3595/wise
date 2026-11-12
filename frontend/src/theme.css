@@ -1,0 +1,396 @@
+/* ===================================================================== Wise staff-app themes
+   Five looks the owner picks under Setup > Branding (Tenant.ui_theme -> <html data-theme>).
+   Each one starts from a real place a restaurant knows, not from a UI kit:
+     steel   - the commercial kitchen: brushed steel panels, machined keys, stencil numerals
+     board   - the cafe menu board: green slate, chalk type, serif names, dotted price leaders
+     irani   - the old Irani cafe: checkered floor, bentwood black outlines, red signage
+     swiss   - the shop sign: white, black, one solid block of the brand colour
+     shake   - the milkshake bar: the brand colour as pastel, soft keys, parlour lettering
+   The restaurant's own colour (--brand) stays the main action colour in every theme.
+   Customer pages (kiosk, QR menu, e-bill, TV, customer screen) and printed bills are not themed.
+   Fonts are bundled (the box works offline): TeX Gyre Heros / Heros Cn / Schola / Adventor / Bonum,
+   GUST Font License, see fonts/GUST-FONT-LICENSE.txt. */
+
+@font-face { font-family: "Heros"; src: url("./fonts/heros-400.woff") format("woff"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Heros"; src: url("./fonts/heros-700.woff") format("woff"); font-weight: 600 800; font-display: swap; }
+@font-face { font-family: "Heros Cn"; src: url("./fonts/heroscn-400.woff") format("woff"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Heros Cn"; src: url("./fonts/heroscn-700.woff") format("woff"); font-weight: 600 900; font-display: swap; }
+@font-face { font-family: "Schola"; src: url("./fonts/schola-400.woff") format("woff"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Schola"; src: url("./fonts/schola-700.woff") format("woff"); font-weight: 600 900; font-display: swap; }
+@font-face { font-family: "Adventor"; src: url("./fonts/adventor-400.woff") format("woff"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Adventor"; src: url("./fonts/adventor-700.woff") format("woff"); font-weight: 600 900; font-display: swap; }
+@font-face { font-family: "Bonum"; src: url("./fonts/bonum-400.woff") format("woff"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Bonum"; src: url("./fonts/bonum-700.woff") format("woff"); font-weight: 600 900; font-display: swap; }
+
+/* ===================================================================== 1. tokens */
+
+/* steel (default) */
+:is(.shell, .auth-page, .ps) {
+  --bg: #d9dcdf;
+  --card: #eceef0;
+  --card-2: #f6f7f8;
+  --well: #ffffff;
+  --line: #bcc2c8;
+  --line-2: #a3aab2;
+  --ink: #15181b;
+  --ink-2: #4b535c;
+  --ink-3: #747d87;
+  --wash: color-mix(in srgb, var(--brand) 14%, #eceef0);
+  --mint: #1f8a55; --amber: #b8730a; --berry: #c42a1c; --sky: #2357b8;
+  --pay-cash: #2c7a4b; --pay-cash-ink: #fff;
+  --pay-upi: #23458f;  --pay-upi-ink: #fff;
+  --pay-card: #1b1e21; --pay-card-ink: #fff;
+  --top-bg: #1b1e21; --top-ink: #f2f3f4;
+  --nav-bg: #c9cdd1; --nav-active: var(--brand);
+  --r-s: 3px; --r-m: 4px; --r-l: 6px; --r-tile: 4px;
+  --font-ui: "Heros", "Segoe UI", system-ui, sans-serif;
+  --font-num: "Heros Cn", "Arial Narrow", "Segoe UI", sans-serif;
+  --font-name: "Heros Cn", "Arial Narrow", "Segoe UI", sans-serif;
+  --name-size: 1.3rem; --name-weight: 700; --name-case: none;
+  --key-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 0 rgba(0, 0, 0, 0.18), 0 2px 3px -1px rgba(0, 0, 0, 0.2);
+  --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --cart-bg: var(--card); --cart-ink: var(--ink);
+  --scheme: light;
+}
+
+/* board */
+[data-theme="board"] :is(.shell, .auth-page, .ps) {
+  --bg: #1d2a24;
+  --card: #23322b;
+  --card-2: #2b3c34;
+  --well: #18231e;
+  --line: rgba(243, 239, 228, 0.13);
+  --line-2: rgba(243, 239, 228, 0.24);
+  --ink: #f3efe4;
+  --ink-2: #bcc6b8;
+  --ink-3: #8a978a;
+  --wash: color-mix(in srgb, var(--brand) 22%, #23322b);
+  --mint: #8fcf8a; --amber: #f2d98b; --berry: #ef8b74; --sky: #9cc0ea;
+  --pay-cash: #8fcf8a; --pay-cash-ink: #13201a;
+  --pay-upi: #9cc0ea;  --pay-upi-ink: #13201a;
+  --pay-card: #f2d98b; --pay-card-ink: #13201a;
+  --top-bg: #16211c; --top-ink: #f3efe4;
+  --nav-bg: #1d2a24; --nav-active: #f2d98b;
+  --r-s: 2px; --r-m: 3px; --r-l: 4px; --r-tile: 2px;
+  --font-ui: "Heros", "Segoe UI", system-ui, sans-serif;
+  --font-num: "Schola", "Century Schoolbook", Georgia, serif;
+  --font-name: "Schola", "Century Schoolbook", Georgia, serif;
+  --name-size: 1.22rem; --name-weight: 700; --name-case: none;
+  --key-shadow: none; --panel-shadow: none;
+  --cart-bg: var(--card); --cart-ink: var(--ink);
+  --scheme: dark;
+}
+
+/* irani */
+[data-theme="irani"] :is(.shell, .auth-page, .ps) {
+  --bg: #e9efe9;
+  --card: #ffffff;
+  --card-2: #f5f7f3;
+  --well: #ffffff;
+  --line: #131313;
+  --line-2: #131313;
+  --ink: #131313;
+  --ink-2: #3d3d3d;
+  --ink-3: #6b6b6b;
+  --wash: color-mix(in srgb, var(--brand) 14%, white);
+  --mint: #1d7a4c; --amber: #a86400; --berry: #c8322b; --sky: #1e4fa0;
+  --pay-cash: #1d7a4c; --pay-cash-ink: #fff;
+  --pay-upi: #1e4fa0;  --pay-upi-ink: #fff;
+  --pay-card: #131313; --pay-card-ink: #fff;
+  --top-bg: #131313; --top-ink: #ffffff;
+  --nav-bg: #ffffff; --nav-active: var(--brand);
+  --r-s: 0; --r-m: 0; --r-l: 0; --r-tile: 0;
+  --font-ui: "Heros", "Segoe UI", system-ui, sans-serif;
+  --font-num: "Adventor", "Century Gothic", "Segoe UI", sans-serif;
+  --font-name: "Adventor", "Century Gothic", "Segoe UI", sans-serif;
+  --name-size: 1.08rem; --name-weight: 700; --name-case: none;
+  --key-shadow: 3px 3px 0 #131313; --panel-shadow: 4px 4px 0 #131313;
+  --cart-bg: var(--card); --cart-ink: var(--ink);
+  --scheme: light;
+}
+
+/* swiss */
+[data-theme="swiss"] :is(.shell, .auth-page, .ps) {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --card-2: #f1f1f1;
+  --well: #f1f1f1;
+  --line: #e2e2e2;
+  --line-2: #c8c8c8;
+  --ink: #000000;
+  --ink-2: #4a4a4a;
+  --ink-3: #8a8a8a;
+  --wash: color-mix(in srgb, var(--brand) 10%, white);
+  --mint: #00875a; --amber: #b26b00; --berry: #d6001c; --sky: #0050c8;
+  --pay-cash: #000000; --pay-cash-ink: #fff;
+  --pay-upi: #000000;  --pay-upi-ink: #fff;
+  --pay-card: #000000; --pay-card-ink: #fff;
+  --top-bg: #ffffff; --top-ink: #000;
+  --nav-bg: #ffffff; --nav-active: #000;
+  --r-s: 0; --r-m: 0; --r-l: 0; --r-tile: 0;
+  --font-ui: "Heros", "Helvetica Neue", Arial, sans-serif;
+  --font-num: "Heros", "Helvetica Neue", Arial, sans-serif;
+  --font-name: "Heros", "Helvetica Neue", Arial, sans-serif;
+  --name-size: 1.02rem; --name-weight: 700; --name-case: none;
+  --key-shadow: none; --panel-shadow: none;
+  --cart-bg: var(--brand); --cart-ink: #ffffff;
+  --scheme: light;
+}
+
+/* shake */
+[data-theme="shake"] :is(.shell, .auth-page, .ps) {
+  --bg: color-mix(in srgb, var(--brand) 9%, #fffaf7);
+  --card: #ffffff;
+  --card-2: color-mix(in srgb, var(--brand) 6%, white);
+  --well: color-mix(in srgb, var(--brand) 5%, white);
+  --line: color-mix(in srgb, var(--brand) 16%, #f1e7e4);
+  --line-2: color-mix(in srgb, var(--brand) 28%, #e8dad6);
+  --ink: color-mix(in srgb, var(--brand) 30%, #1f1420);
+  --ink-2: color-mix(in srgb, var(--brand) 18%, #5b4c58);
+  --ink-3: color-mix(in srgb, var(--brand) 12%, #94858f);
+  --wash: color-mix(in srgb, var(--brand) 14%, white);
+  --mint: #2b9c6a; --amber: #d1880f; --berry: #d9365b; --sky: #4f6fd8;
+  --pay-cash: #7dd3a8; --pay-cash-ink: #10331f;
+  --pay-upi: #b9adf7;  --pay-upi-ink: #221a4d;
+  --pay-card: #ffd08a; --pay-card-ink: #4a2f05;
+  --top-bg: var(--brand); --top-ink: #fff;
+  --nav-bg: #ffffff; --nav-active: var(--brand);
+  --r-s: 12px; --r-m: 16px; --r-l: 22px; --r-tile: 20px;
+  --font-ui: "Heros", "Segoe UI", system-ui, sans-serif;
+  --font-num: "Bonum", "Bookman Old Style", Georgia, serif;
+  --font-name: "Bonum", "Bookman Old Style", Georgia, serif;
+  --name-size: 1.1rem; --name-weight: 700; --name-case: none;
+  --key-shadow: none; --panel-shadow: 0 10px 30px -18px color-mix(in srgb, var(--brand) 60%, transparent);
+  --cart-bg: var(--card); --cart-ink: var(--ink);
+  --scheme: light;
+}
+
+/* ===================================================================== 2. components (read the tokens) */
+
+:is(.shell, .auth-page, .ps) {
+  --font: var(--font-ui);
+  font-family: var(--font-ui);
+  color: var(--ink);
+  background: var(--bg);
+  color-scheme: var(--scheme);
+  font-variant-numeric: tabular-nums;
+}
+body:has(.shell), body:has(.auth-page), body:has(.ps) { background: var(--bg, #d9dcdf); }
+html:not([data-theme]) body:has(.shell), [data-theme="steel"] body:has(.shell) { background: #d9dcdf; }
+[data-theme="board"] body:has(:is(.shell, .auth-page)) { background: #1d2a24; }
+[data-theme="irani"] body:has(:is(.shell, .auth-page)) { background: #e9efe9; }
+[data-theme="swiss"] body:has(:is(.shell, .auth-page)) { background: #fff; }
+
+.shell h1, .auth-page h1 { font-family: var(--font-name); font-weight: 700; font-size: 2.1rem; letter-spacing: 0; line-height: 1.05; }
+.shell h2, .auth-page h2 { font-weight: 700; font-size: 1.06rem; letter-spacing: 0; }
+.shell .muted, .auth-page .muted { color: var(--ink-2); }
+
+/* chrome */
+.shell .topbar { background: var(--top-bg); color: var(--top-ink); padding: 0.5rem 1.1rem; }
+.shell .topbar .muted { color: color-mix(in srgb, var(--top-ink) 70%, transparent); }
+.shell .topbar .link { color: var(--top-ink); text-decoration: none; }
+.shell .brand-mark strong { font-family: var(--font-name); font-size: 1.3rem; font-weight: 700; letter-spacing: 0; }
+.shell .nav { background: var(--nav-bg); border-bottom: 1px solid var(--line); }
+.shell .nav a { color: var(--ink-2); font-weight: 600; text-decoration: none; }
+.shell .nav a:hover { color: var(--ink); }
+.shell .nav a.active { color: var(--ink); border-bottom-color: var(--nav-active); }
+.shell .nav + .nav { background: var(--card-2); }
+.shell .powered { color: var(--ink-3); }
+
+/* controls */
+.shell .btn, .auth-page .btn { border-radius: var(--r-m); font-weight: 700; }
+.shell .btn-ghost, .auth-page .btn-ghost { background: var(--card-2); border-color: var(--line-2); color: var(--ink); box-shadow: var(--key-shadow); }
+.shell .btn-primary, .auth-page .btn-primary { box-shadow: var(--key-shadow); }
+.shell .link, .auth-page .link, .shell a:not(.btn), .auth-page a:not(.btn) { color: var(--ink); text-decoration-color: color-mix(in srgb, var(--brand) 75%, transparent); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.shell .link.danger { color: var(--berry); }
+.shell .input, .auth-page .input { background: var(--well); border-color: var(--line-2); color: var(--ink); border-radius: var(--r-s); }
+.shell .input::placeholder, .auth-page .input::placeholder { color: var(--ink-3); }
+.shell .field-label { color: var(--ink); font-weight: 700; font-size: 0.86rem; }
+.shell .field-hint { color: var(--ink-3); }
+.shell .choice, .auth-page .choice { background: var(--card-2); border-color: var(--line-2); color: var(--ink); border-radius: var(--r-m); }
+.shell .choice.on, .auth-page .choice.on { background: var(--wash); border-color: var(--brand); color: var(--ink); }
+.shell :is(.tabs, .seg), .auth-page :is(.tabs, .seg) { background: var(--well); border-color: var(--line-2); border-radius: var(--r-m); }
+.shell :is(.tabs, .seg) button, .auth-page :is(.tabs, .seg) button { color: var(--ink-2); border-radius: var(--r-s); }
+.shell :is(.tabs, .seg) button.active, .auth-page :is(.tabs, .seg) button.active { background: var(--ink); color: var(--bg); box-shadow: none; }
+
+/* surfaces */
+.shell .card { background: var(--card); border-color: var(--line); border-radius: var(--r-l); box-shadow: var(--panel-shadow); }
+.shell .card > h2:first-child, .shell .card-head h2 { font-family: var(--font-name); font-size: 1.3rem; }
+.shell .table th { color: var(--ink-3); border-bottom-color: var(--line-2); }
+.shell .table td { border-bottom-color: var(--line); }
+.shell .stat { background: var(--card); border-color: var(--line); border-radius: var(--r-l); box-shadow: var(--panel-shadow); }
+.shell .stat strong { font-family: var(--font-num); font-size: 1.9rem; font-weight: 700; }
+.shell .shift-bar { background: var(--card); border-color: var(--line); border-radius: var(--r-m); box-shadow: var(--panel-shadow); }
+.shell .modal-back { background: rgba(10, 12, 14, 0.55); }
+.shell .modal { background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-l); box-shadow: var(--panel-shadow), 0 30px 70px -30px rgba(0, 0, 0, 0.6); }
+.shell .modal h2 { font-family: var(--font-name); font-size: 1.5rem; }
+.shell .totals .grand { font-family: var(--font-num); font-size: 1.9rem; font-weight: 700; border-top-color: var(--line-2); }
+.shell :is(.upi-box, .quickpay) { background: var(--well); }
+.shell .qr-img { background: #fff; padding: 6px; }
+.shell :is(.receipt, .kot-slip) { background: #fff; color: #000; padding: 4mm 3mm; }
+
+/* counter */
+.shell .pos-search { background: var(--well); border-color: var(--line-2); border-radius: var(--r-m); }
+.shell .pos-search .search { font-size: 1.08rem; background: transparent; }
+.shell .pos-cats button { font-family: var(--font-name); font-size: 1.05rem; font-weight: 700; background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-m); color: var(--ink-2); box-shadow: inset 0 -3px 0 var(--cat, var(--line-2)); }
+.shell .pos-cats button.active { background: var(--ink); border-color: var(--ink); color: var(--bg); box-shadow: inset 0 -4px 0 var(--cat, var(--brand)); }
+.shell .pos-grid { grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); gap: 0.55rem; }
+.shell .tile { background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-tile); box-shadow: var(--key-shadow), inset 5px 0 0 var(--cat); }
+.shell .tile-main { color: var(--ink); padding: 0.85rem 0.9rem 0.55rem 1.1rem; }
+.shell :is(.tile-main, .tile-sizes button):hover { background: color-mix(in srgb, var(--cat) 9%, var(--card)); }
+.shell :is(.tile-main, .tile-sizes button):active { background: color-mix(in srgb, var(--cat) 24%, var(--card)); }
+.shell .tile-name { font-family: var(--font-name); font-size: var(--name-size); font-weight: var(--name-weight); text-transform: var(--name-case); line-height: 1.1; letter-spacing: 0; }
+.shell .tile-price, .shell .tile-sizes button strong { font-family: var(--font-num); font-size: 1.35rem; font-weight: 700; }
+.shell .tile-code { color: var(--ink-3); }
+.shell .tile-sizes { border-top-color: var(--line); }
+.shell .tile-sizes button { color: var(--ink); }
+.shell .tile-sizes button + button { border-left-color: var(--line); }
+.shell .tile-sizes button span { color: var(--ink-3); font-weight: 700; }
+.shell .tile-addons { border-top-color: var(--line); color: var(--ink-2); }
+
+.shell .pos-cart { background: var(--cart-bg); color: var(--cart-ink); border: 1px solid var(--line-2); border-radius: var(--r-l); box-shadow: var(--panel-shadow); }
+.shell .cart-lines li { border-bottom-color: var(--line); }
+.shell .cart-name { font-family: var(--font-name); font-size: 1.12rem; font-weight: 700; }
+.shell .cart-lines .price, .shell .qty-ctl span { font-family: var(--font-num); font-size: 1.15rem; font-weight: 700; }
+.shell .qty-ctl { background: var(--well); border: 1px solid var(--line); }
+.shell .qty-ctl button { background: var(--card-2); color: var(--ink); box-shadow: var(--key-shadow); }
+.shell .cart-total { border-top: 1px solid var(--line-2); padding-top: 0.55rem; }
+.shell .cart-total strong { font-family: var(--font-num); font-size: 3rem; font-weight: 700; letter-spacing: -0.01em; }
+.shell .quickpay { border: 1px solid var(--line); border-radius: var(--r-l); }
+.shell .pay { font-family: var(--font-num); font-size: 1.45rem; font-weight: 700; padding: 1rem 0.4rem; border-radius: var(--r-m); border: 0; box-shadow: var(--key-shadow); }
+.shell .pay-cash { background: var(--pay-cash); color: var(--pay-cash-ink); }
+.shell .pay-upi { background: var(--pay-upi); color: var(--pay-upi-ink); }
+.shell .pay-card { background: var(--pay-card); color: var(--pay-card-ink); border: 0; }
+.shell .tender .btn-primary { background: var(--pay-cash); color: var(--pay-cash-ink); font-family: var(--font-num); font-size: 1.3rem; }
+.shell .tender.upi .btn-primary { background: var(--pay-upi); color: var(--pay-upi-ink); }
+.shell .presets button { background: var(--card-2); border-color: var(--line-2); color: var(--ink); font-family: var(--font-num); font-size: 1.15rem; border-radius: var(--r-s); box-shadow: var(--key-shadow); }
+.shell .order-row .token { font-family: var(--font-num); font-size: 1.45rem; font-weight: 700; }
+.shell .sent strong { font-family: var(--font-num); font-size: 1.3rem; }
+
+/* kitchen display keeps its dark colours everywhere; only the lettering follows the theme */
+:is(.shell, .kitchen-standalone) :is(.kds-title, .kds-col h2) { font-family: var(--font-name, "Heros Cn"); }
+:is(.shell, .kitchen-standalone) :is(.t-token, .t-qty, .t-timer) { font-family: var(--font-num, "Heros Cn"); font-weight: 700; }
+.kitchen-standalone { --font-name: "Heros Cn", "Arial Narrow", sans-serif; --font-num: "Heros Cn", "Arial Narrow", sans-serif; font-family: "Heros", "Segoe UI", sans-serif; }
+
+/* sign-in */
+.auth-card { background: var(--card); border-color: var(--line-2); border-radius: var(--r-l); box-shadow: var(--panel-shadow); }
+.auth-page .pin-pad button { background: var(--card-2); border-color: var(--line-2); color: var(--ink); font-family: var(--font-num); font-size: 1.9rem; border-radius: var(--r-m); box-shadow: var(--key-shadow); }
+.auth-page .pin-dots span { border-color: var(--ink); }
+.auth-page .pin-dots span.on { background: var(--ink); }
+
+/* ===================================================================== 3. what makes each one itself */
+
+/* steel: brushed panels, engraved edges */
+html:not([data-theme]) .shell, [data-theme="steel"] .shell {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 240px), repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 1px, rgba(0, 0, 0, 0.018) 1px 3px), #d9dcdf;
+}
+html:not([data-theme]) .shell .nav a.active, [data-theme="steel"] .shell .nav a.active { border-bottom-width: 4px; }
+
+/* board: chalk dust, menu-card price leaders, serif names */
+[data-theme="board"] .shell { background: radial-gradient(900px 500px at 20% 0%, rgba(255, 255, 255, 0.05), transparent 70%), #1d2a24; }
+[data-theme="board"] .shell .tile { border-style: solid; border-color: rgba(243, 239, 228, 0.18); box-shadow: inset 0 3px 0 var(--cat); }
+[data-theme="board"] .shell .tile-sizes button { flex-direction: row; justify-content: space-between; gap: 0.4rem; padding: 0.45rem 0.7rem; }
+[data-theme="board"] .shell .tile-sizes { grid-auto-flow: row; }
+[data-theme="board"] .shell .tile-sizes button + button { border-left: 0; border-top: 1px dashed var(--line-2); }
+[data-theme="board"] .shell .tile-sizes button span { font-size: 0.85rem; flex: 1; text-align: left; border-bottom: 2px dotted var(--line-2); margin-bottom: 0.35rem; color: var(--ink-2); }
+[data-theme="board"] .shell .cart-lines li, [data-theme="board"] .shell .table td { border-bottom-style: dashed; }
+[data-theme="board"] .shell .pos-cats button.active { background: #f3efe4; color: #1d2a24; }
+[data-theme="board"] .shell :is(.tabs, .seg) button.active { background: #f3efe4; color: #1d2a24; }
+[data-theme="board"] .shell .btn-primary { color: #fff; }
+
+/* irani: checkered floor, black outlines, hard offset shadows */
+[data-theme="irani"] .shell {
+  background: repeating-conic-gradient(#e2eae3 0 25%, #edf2ed 0 50%) 0 0 / 56px 56px;
+}
+[data-theme="irani"] .shell :is(.card, .pos-cart, .shift-bar, .stat, .modal) { border: 2px solid #131313; }
+[data-theme="irani"] .shell .tile { border: 2px solid #131313; box-shadow: 3px 3px 0 #131313; }
+[data-theme="irani"] .shell .tile::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px; background: var(--cat); border-bottom: 2px solid #131313; }
+[data-theme="irani"] .shell .tile-main { padding-top: 1.05rem; }
+[data-theme="irani"] .shell :is(.btn, .pay, .choice, .presets button, .pos-cats button) { border: 2px solid #131313; }
+[data-theme="irani"] .shell .pos-cats button { box-shadow: 3px 3px 0 #131313; }
+[data-theme="irani"] .shell .pos-cats button.active { background: var(--brand); color: #fff; border-color: #131313; box-shadow: 3px 3px 0 #131313; }
+[data-theme="irani"] .shell .pay:active, [data-theme="irani"] .shell .tile:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #131313; }
+[data-theme="irani"] .shell .topbar { border-bottom: 4px solid var(--brand); }
+[data-theme="irani"] .shell .nav { border-bottom: 2px solid #131313; }
+[data-theme="irani"] .shell .input { border: 2px solid #131313; }
+
+/* swiss: no boxes, rules and space; the cart is one solid block of the brand colour */
+[data-theme="swiss"] .shell .topbar { border-bottom: 2px solid #000; }
+[data-theme="swiss"] .shell .topbar .logo-fallback { border-radius: 0; }
+[data-theme="swiss"] .shell .nav { border-bottom: 2px solid #000; }
+[data-theme="swiss"] .shell .nav a.active { border-bottom-width: 6px; }
+[data-theme="swiss"] .shell .card { border: 0; border-top: 2px solid #000; padding-left: 0; padding-right: 0; }
+[data-theme="swiss"] .shell .tile { background: #f1f1f1; border: 0; box-shadow: inset 0 6px 0 var(--cat); }
+[data-theme="swiss"] .shell .tile-sizes { border-top: 1px solid #fff; }
+[data-theme="swiss"] .shell .tile-sizes button + button { border-left: 1px solid #fff; }
+[data-theme="swiss"] .shell :is(.tile-main, .tile-sizes button):hover { background: #e4e4e4; }
+[data-theme="swiss"] .shell :is(.tile-main, .tile-sizes button):active { background: #000; color: #fff; }
+[data-theme="swiss"] .shell .tile-price, [data-theme="swiss"] .shell .tile-sizes button strong { font-size: 1.3rem; letter-spacing: -0.02em; }
+[data-theme="swiss"] .shell .tile-name { letter-spacing: -0.01em; }
+[data-theme="swiss"] .shell .pos-cats button { border: 0; background: none; box-shadow: none; border-bottom: 3px solid transparent; border-radius: 0; color: #8a8a8a; font-size: 1.15rem; padding-left: 0; margin-right: 0.9rem; }
+[data-theme="swiss"] .shell .pos-cats button.active { background: none; color: #000; border-bottom-color: #000; box-shadow: none; }
+[data-theme="swiss"] .shell .pos-cart { border: 0; }
+[data-theme="swiss"] .shell .pos-cart :is(.muted, .cart-size, .cart-total span, .small) { color: rgba(255, 255, 255, 0.8); }
+[data-theme="swiss"] .shell .pos-cart .cart-lines li, [data-theme="swiss"] .shell .pos-cart .cart-total, [data-theme="swiss"] .shell .pos-cart .active-orders, [data-theme="swiss"] .shell .pos-cart .order-row { border-color: rgba(255, 255, 255, 0.35); }
+[data-theme="swiss"] .shell .pos-cart :is(.input, .seg, .tabs) { background: #fff; color: #000; border-color: #fff; }
+[data-theme="swiss"] .shell .pos-cart .seg button { color: #555; }
+[data-theme="swiss"] .shell .pos-cart .seg button.active { background: #000; color: #fff; }
+[data-theme="swiss"] .shell .pos-cart .qty-ctl { background: rgba(0, 0, 0, 0.18); border: 0; }
+[data-theme="swiss"] .shell .pos-cart .qty-ctl button { background: #fff; color: #000; box-shadow: none; }
+[data-theme="swiss"] .shell .pos-cart .quickpay { background: #fff; color: #000; border: 0; }
+[data-theme="swiss"] .shell .pos-cart .quickpay .muted { color: #555; }
+[data-theme="swiss"] .shell .pos-cart :is(.link, a) { color: #fff; text-decoration-color: rgba(255, 255, 255, 0.6); }
+[data-theme="swiss"] .shell .pos-cart .quickpay .link { color: #000; text-decoration-color: var(--brand); }
+[data-theme="swiss"] .shell .pos-cart .btn-ghost { background: transparent; color: #fff; border: 2px solid #fff; }
+[data-theme="swiss"] .shell .pos-cart .cart-empty { color: rgba(255, 255, 255, 0.8); border-color: rgba(255, 255, 255, 0.5) !important; }
+[data-theme="swiss"] .shell .pos-cart .sent { background: rgba(0, 0, 0, 0.2); color: #fff; }
+[data-theme="swiss"] .shell .pay { font-size: 1.25rem; letter-spacing: -0.01em; }
+[data-theme="swiss"] .shell .pay + .pay { box-shadow: inset 1px 0 0 #333; }
+[data-theme="swiss"] .shell .pay-buttons { gap: 0; }
+[data-theme="swiss"] .shell .btn-ghost { background: #fff; border: 2px solid #000; }
+[data-theme="swiss"] .shell .input { border: 0; border-bottom: 2px solid #000; background: #f1f1f1; }
+
+/* shake: parlour lettering, soft filled tiles, pill keys */
+[data-theme="shake"] .shell .tile { border: 0; background: color-mix(in srgb, var(--cat) 15%, white); box-shadow: none; }
+[data-theme="shake"] .shell .tile-sizes { border-top: 2px dotted color-mix(in srgb, var(--cat) 40%, white); }
+[data-theme="shake"] .shell .tile-sizes button + button { border-left: 2px dotted color-mix(in srgb, var(--cat) 40%, white); }
+[data-theme="shake"] .shell :is(.tile-main, .tile-sizes button):hover { background: color-mix(in srgb, var(--cat) 24%, white); }
+[data-theme="shake"] .shell :is(.tile-main, .tile-sizes button):active { background: color-mix(in srgb, var(--cat) 40%, white); }
+[data-theme="shake"] .shell .pos-cats button { border: 0; border-radius: 999px; background: color-mix(in srgb, var(--cat, var(--brand)) 16%, white); box-shadow: none; color: var(--ink); }
+[data-theme="shake"] .shell .pos-cats button.active { background: var(--cat, var(--brand)); color: #fff; box-shadow: none; }
+[data-theme="shake"] .shell :is(.pay, .presets button, .btn, .choice) { border-radius: 999px; }
+[data-theme="shake"] .shell .pos-cart, [data-theme="shake"] .shell .card { border: 0; }
+[data-theme="shake"] .shell .topbar .logo-fallback { background: #fff; color: var(--brand); }
+[data-theme="shake"] .shell :is(.tabs, .seg) { border-radius: 999px; }
+[data-theme="shake"] .shell :is(.tabs, .seg) button { border-radius: 999px; }
+[data-theme="shake"] .shell :is(.tabs, .seg) button.active { background: var(--brand); color: #fff; }
+
+/* theme picker swatches (Setup > Branding) */
+.theme-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0.8rem; }
+.theme-pick { border: 2px solid var(--line-2); background: var(--card); border-radius: 10px; padding: 0.5rem; cursor: pointer; text-align: left; font: inherit; color: var(--ink); display: flex; flex-direction: column; gap: 0.45rem; }
+.theme-pick.on { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 30%, transparent); }
+.theme-pick img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: left top; border-radius: 6px; display: block; border: 1px solid var(--line); }
+.theme-pick strong { font-size: 1rem; }
+.theme-pick span { font-size: 0.82rem; color: var(--ink-2); line-height: 1.35; }
+
+/* board is the dark one: the light-only tints from styles.css, redone for slate */
+[data-theme="board"] .shell .badge { background: var(--card-2); border-color: var(--line-2); color: var(--ink-2); }
+[data-theme="board"] .shell :is(.badge.edited, .sens, .sms-st.st-queued, .status-pill.st-preparing) { background: rgba(242, 217, 139, 0.14); color: #f2d98b; border-color: rgba(242, 217, 139, 0.35); }
+[data-theme="board"] .shell :is(.badge.ok-badge, .status-pill.st-ready) { background: rgba(143, 207, 138, 0.15); color: #a9dda5; border-color: rgba(143, 207, 138, 0.35); }
+[data-theme="board"] .shell :is(.badge.addon, .sms-st.st-failed) { background: rgba(239, 139, 116, 0.14); color: #f3a693; }
+[data-theme="board"] .shell :is(.badge.qr, .badge.kiosk) { background: rgba(156, 192, 234, 0.14); color: #b9d2f0; border-color: rgba(156, 192, 234, 0.3); }
+[data-theme="board"] .shell :is(.status-pill, .status-pill.st-new) { background: var(--card-2); color: var(--ink-2); }
+[data-theme="board"] .shell .banner { background: var(--wash); border-color: var(--line-2); }
+[data-theme="board"] .shell :is(.banner.warn, .pending, .offline-bar.warn, .checklist li.warn, .dev-note) { background: rgba(242, 217, 139, 0.1); border-color: rgba(242, 217, 139, 0.35); color: var(--ink); }
+[data-theme="board"] .shell :is(.banner.ok-banner, .shift-bar.closed, .sent) { background: rgba(143, 207, 138, 0.1); border-color: rgba(143, 207, 138, 0.35); color: var(--ink); }
+[data-theme="board"] .shell :is(.checklist li.block, .offline-bar.off) { background: rgba(239, 139, 116, 0.1); border-color: rgba(239, 139, 116, 0.4); color: var(--ink); }
+[data-theme="board"] .shell :is(.table tr.row-warn td, .table.access td.changed, .fix-lines li.edited) { background: rgba(242, 217, 139, 0.08); }
+[data-theme="board"] .shell :is(.table tr.row-bad td) { background: rgba(239, 139, 116, 0.1); }
+[data-theme="board"] .shell .fix-lines li.added { background: rgba(143, 207, 138, 0.08); }
+[data-theme="board"] .shell .rep-table tfoot td { background: var(--card-2); }
+[data-theme="board"] .shell .art-drawn { background: color-mix(in srgb, var(--tint) 22%, #23322b); }
+[data-theme="board"] .shell :is(.upi-toast, .upi-chip, .upi-list) { background: var(--card); color: var(--ink); }
+[data-theme="irani"] .shell .pos-search { border: 2px solid #131313; }
+[data-theme="irani"] .shell .pos-search .input { border: 0; }
+[data-theme="irani"] .shell .qty-ctl { border: 2px solid #131313; }
+[data-theme="irani"] .shell .qty-ctl button { box-shadow: none; }

@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Looks after Wise on the AWS server.
+#   wise-cloud status                 is everything running, disk space, last backup
+#   wise-cloud logs [service]         recent logs (api, web, caddy, db)
+#   wise-cloud login-code             the owner's latest sign-in code (until SMS is set up)
+#   wise-cloud update <wise-zip>      install a new version; backs up first, keeps data
+#   wise-cloud backup                 encrypted database backup now (runs by itself at 4:20 am)
+#   wise-cloud backups                list the backups on this server
+#   wise-cloud s3 <bucket>            also copy every backup to an S3 bucket (needs an IAM role)
+#   wise-cloud signup open|first|closed   who may create a new restaurant account
+#   wise-cloud sms <msg91-key> <template-id>   send sign-in codes by SMS (MSG91, needs DLT)
+#   wise-cloud fast2sms <api-key>     send sign-in codes by SMS through Fast2SMS (no DLT; good for trials)
+#   wise-cloud sms-off                stop sending; codes go back to the log (wise-cloud login-code)
+#   wise-cloud restart | stop | start
+set -euo pipefail
+ROOT=/opt/wise; ENV_FILE=$ROOT/.env; SRC=$ROOT/src
+say() { printf '%s\n' "$*"; }; die() { printf 'wise-cloud: %s\n' "$*" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || die "run it with sudo"
+get() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- || true; }
+put() { if grep -qE "^$1=" "$ENV_FILE"; then sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; else echo "$1=$2" >> "$ENV_FILE"; fi; }
+dc() {
+  local prof=(); [ "$(get WISE_DB_MODE)" = local ] && prof=(--profile localdb)
+  (cd "$SRC/deploy/aws" && docker compose --env-file "$ENV_FILE" "${prof[@]}" "$@")
+}
+wait_up() {
+  for _ in $(seq 1 60); do
+    [ "$(docker inspect -f '{{.State.Health.Status}}' wise-api-1 2>/dev/null)" = healthy ] && { say "  Wise is running."; return 0; }
+    sleep 3
+  done
+  say "  Wise didn't come up in 3 minutes. Look at: sudo wise-cloud logs api"; return 1
+}
+backup() {
+  local d; d=$(date +%Y-%m-%d_%H%M); local out="$ROOT/backups/wise-$d.sql.gz.age"
+  local host; host=$(get WISE_DB_HOST); local net=()
+  [ "$host" = db ] && net=(--network wise_default)
+  # Row-level security applies to the table owner too (and RDS has no superuser), so the dump reads
+  # through the policies with Wise's system-session switch on. That returns every restaurant's rows.
+  if ! docker run --rm "${net[@]}" -e PGPASSWORD="$(get WISE_OWNER_PASSWORD)" -e PGSSLMODE="$(get WISE_DB_SSL)" \
+    -e PGOPTIONS="-c app.bypass_rls=on" postgres:16 \
+    pg_dump -h "$host" -U wise_owner -d wise --no-owner --enable-row-security -Fp \
+    | gzip -9 | age -r "$(grep -o 'age1[0-9a-z]*' "$ROOT/config/backup.key" | head -1)" > "$out"; then
+    rm -f "$out"; die "backup failed: the database could not be read"
+  fi
+  [ -s "$out" ] || die "backup came out empty"
+  find "$ROOT/backups" -name 'wise-*.age' -mtime +14 -delete
+  local b; b=$(get WISE_S3_BUCKET); [ -n "$b" ] && command -v aws >/dev/null && aws s3 cp "$out" "s3://$b/$(basename "$out")" --only-show-errors
+  say "  Backup saved: $out ($(du -h "$out" | cut -f1))"
+}
+cmd=${1:-help}; shift || true
+case "$cmd" in
+  status)
+    dc ps
+    df -h / | tail -1 | awk '{print "  Disk: " $4 " free of " $2}'
+    ls -1t "$ROOT"/backups/*.age 2>/dev/null | head -1 | sed 's/^/  Last backup: /' || say "  No backup yet." ;;
+  logs) dc logs --tail 200 "$@" ;;
+  login-code)
+    code=$(dc logs --since 15m api 2>/dev/null | grep -o 'OTP for .*' | tail -1)
+    [ -n "$code" ] && say "  ${code/OTP for/Code for}" || say "  No sign-in code in the last 15 minutes. Tap \"Send code\" first." ;;
+  wait) wait_up ;;
+  start-fresh) dc build && dc up -d && wait_up ;;
+  backup) backup ;;
+  backups) ls -lh "$ROOT"/backups/ ;;
+  update)
+    zip=${1:-}; [ -f "$zip" ] || die "give the new Wise zip: sudo wise-cloud update wise-v1.2.0.zip"
+    backup
+    tmp=$(mktemp -d); unzip -q "$zip" -d "$tmp"; [ -f "$tmp/wise/VERSION" ] || die "that zip doesn't hold Wise"
+    rsync -a --delete --exclude node_modules "$tmp/wise/" "$SRC/"; rm -rf "$tmp"
+    install -m 755 "$SRC/deploy/aws/wise-cloud" /usr/local/bin/wise-cloud
+    put WISE_VERSION "$(cat "$SRC/VERSION")"
+    dc build && dc up -d && wait_up && say "  Now on Wise $(cat "$SRC/VERSION"). Open apps pick it up by themselves." ;;
+  s3) [ -n "${1:-}" ] || die "give a bucket name"; command -v aws >/dev/null || snap install aws-cli --classic
+      put WISE_S3_BUCKET "$1"; say "  Backups will also go to s3://$1 (the server needs an IAM role that may write there)." ;;
+  signup) case "${1:-}" in open|first|closed) put WISE_SIGNUP_MODE "$1"; dc up -d api; say "  Sign-up is now: $1";; *) die "open, first or closed";; esac ;;
+  sms) [ -n "${2:-}" ] || die "give the MSG91 auth key and template id"
+       put WISE_MSG91_AUTH_KEY "$1"; put WISE_MSG91_TEMPLATE_ID "$2"; put WISE_OTP_PROVIDER msg91; dc up -d api; say "  Sign-in codes now go by SMS." ;;
+  fast2sms) [ -n "${1:-}" ] || die "give the Fast2SMS API key (Fast2SMS panel > Dev API)"
+       put WISE_FAST2SMS_API_KEY "$1"; put WISE_OTP_PROVIDER fast2sms; dc up -d api; wait_up; say "  Sign-in codes now go by SMS through Fast2SMS." ;;
+  sms-off) put WISE_OTP_PROVIDER box; dc up -d api; wait_up; say "  SMS off. Get codes with: sudo wise-cloud login-code" ;;
+  start) dc up -d; wait_up ;;
+  stop) dc stop ;;
+  restart) dc restart; wait_up ;;
+  *) awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0" ;;
+esac

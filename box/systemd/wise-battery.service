@@ -1,0 +1,10 @@
+[Unit]
+Description=Wise Box on a laptop: stop charging at 80% to protect the battery
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'for f in /sys/class/power_supply/BAT*/charge_control_end_threshold; do [ -w "$f" ] && echo 80 > "$f"; done; true'
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Wise Box backup every night (after the 4 am day change) and at midday
+
+[Timer]
+OnCalendar=*-*-* 04:20:00
+OnCalendar=*-*-* 15:20:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

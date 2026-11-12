@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wise"]
+      interval: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    environment:
+      WISE_DATABASE_URL: postgresql+psycopg://wise_app:wise_app@db:5432/wise
+      WISE_MIGRATE_DATABASE_URL: postgresql+psycopg://wise_owner:wise_owner@db:5432/wise
+      WISE_OTP_PROVIDER: console
+      WISE_PUBLIC_BASE_URL: http://localhost:8000
+      WISE_CORS_ORIGINS: http://localhost:5173
+    ports: ["8000:8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  pgdata:
+  uploads:

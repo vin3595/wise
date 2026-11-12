@@ -1,0 +1,466 @@
+#!/usr/bin/env bash
+# wise: looks after a Wise Box. Run with sudo.
+#
+#   wise status                    is everything working? addresses, last backup, disk
+#   wise backup                    encrypted backup now (also runs every night by itself)
+#   wise verify-backup             restores the latest backup into a scratch database to prove it works
+#   wise restore <file> [--key k]  puts a backup back (on this box or a replacement)
+#   wise update <wise-x.y.zip>     backs up, installs the new version, rolls back by itself if it fails
+#   wise rollback                  goes back to the previous version
+#   wise print-key <key>           connects the built-in printer bridge (key from Kitchen setup > Printing)
+#   wise tunnel <token> <url>      turns on the public address (Cloudflare Tunnel); "wise tunnel off"
+#   wise offsite add <remote:path> another off-site copy: Google Drive, a cloud bucket... (rclone remote)
+#   wise offsite list | remove <remote:path>
+#   wise usb-prepare               sets up a new USB backup drive (erases it)
+#   wise alerts email <to> | webhook <url> | test     where problem alerts are sent
+#   wise health                    runs the checks now (runs every 5 minutes by itself)
+#   wise login-code                the owner's latest sign-in code (when SMS isn't set up)
+#   wise loadtest [minutes] [scale] rush-hour test on a throwaway copy of Wise (real data untouched)
+#   wise logs [service]            recent logs (api, web, db, printer, tunnel)
+#   wise start | stop | restart
+set -euo pipefail
+
+ROOT=${WISE_ROOT:-/opt/wise}
+ENV_FILE="$ROOT/.env"
+CONF="$ROOT/config"
+STATE="$ROOT/state"
+BACKUPS="$ROOT/backups"
+EXTERNAL=${WISE_EXTERNAL_DIR:-/media/wise-backup}   # the USB backup disk (label WISEBACKUP) mounts here
+KEEP_DAILY=14 KEEP_WEEKLY=8 KEEP_MONTHLY=12
+
+TMPS=()
+cleanup() { [ ${#TMPS[@]} -eq 0 ] || rm -rf "${TMPS[@]}"; }
+trap cleanup EXIT
+newtmp() { mktemp -d; }   # callers add the result to TMPS
+
+say()  { printf '%s\n' "$*"; }
+ok()   { printf '  \033[32m✓\033[0m %s\n' "$*"; }
+bad()  { printf '  \033[31m✗\033[0m %s\n' "$*"; }
+warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
+die()  { printf 'wise: %s\n' "$*" >&2; exit 1; }
+need_root() { [ "$(id -u)" -eq 0 ] || die "run this with sudo: sudo wise $*"; }
+
+current_dir() { readlink -f "$ROOT/current"; }
+version() { cat "$(current_dir)/VERSION" 2>/dev/null || echo local; }
+env_get() { grep -E "^$1=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- ; }
+env_set() {  # env_set KEY VALUE (value kept literal)
+  local k=$1 v=$2 tmp
+  tmp=$(mktemp)
+  grep -vE "^$k=" "$ENV_FILE" > "$tmp" || true
+  printf '%s=%s\n' "$k" "$v" >> "$tmp"
+  install -m 600 "$tmp" "$ENV_FILE"; rm -f "$tmp"
+}
+
+dc() {  # docker compose for the running version
+  if [ -n "${WISE_DC:-}" ]; then "$WISE_DC" "$@"; return; fi   # tests only
+  local dir; dir=$(current_dir)
+  local profiles=""
+  [ -n "$(env_get CLOUDFLARE_TUNNEL_TOKEN)" ] && profiles="tunnel"
+  WISE_VERSION=$(version) WISE_SRC="$dir" COMPOSE_PROFILES="$profiles" \
+    docker compose --env-file "$ENV_FILE" -f "$dir/box/compose.yml" --project-directory "$dir/box" "$@"
+}
+psql_db() { dc exec -T db psql -v ON_ERROR_STOP=1 -U postgres "$@"; }
+
+box_ips() { hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^(10|172|192)\.' | head -3 | tr '\n' ' '; }
+
+wait_healthy() {  # wait_healthy SECONDS
+  [ -n "${WISE_SKIP_HEALTH:-}" ] && return 0   # tests only
+  local t=$1 i=0
+  while [ "$i" -lt "$t" ]; do
+    if curl -fsS -m 3 http://127.0.0.1/api/health >/dev/null 2>&1; then return 0; fi
+    sleep 3; i=$((i + 3))
+  done
+  return 1
+}
+
+# ------------------------------------------------------------------ backups
+# A backup is one file: the database (pg_dump custom format) plus uploaded pictures, encrypted with
+# age to the owner's backup key. The box keeps a copy of the key so it can check its own backups;
+# the owner keeps the same key safe to restore onto a replacement box.
+
+backup_now() {
+  need_root backup
+  local quiet=${1:-}
+  local stamp tmp out
+  stamp=$(date +%Y%m%d-%H%M)
+  tmp=$(newtmp); TMPS+=("$tmp")
+  dc exec -T db pg_dump -U postgres -d wise -Fc --no-owner > "$tmp/wise.dump"
+  [ -s "$tmp/wise.dump" ] || die "database dump came out empty"
+  tar -C "$ROOT/data" -cf "$tmp/uploads.tar" uploads 2>/dev/null || tar -cf "$tmp/uploads.tar" -T /dev/null
+  printf '%s\n' "$(version)" > "$tmp/VERSION"
+  mkdir -p "$BACKUPS/daily"
+  out="$BACKUPS/daily/wise-$stamp.tar.age"
+  tar -C "$tmp" -cf - wise.dump uploads.tar VERSION | age -R "$CONF/backup.pub" -o "$out"
+  chmod 600 "$out"
+  # Weekly (Sunday) and monthly (1st) copies are kept longer.
+  if [ "$(date +%u)" = 7 ]; then mkdir -p "$BACKUPS/weekly"; cp "$out" "$BACKUPS/weekly/"; fi
+  if [ "$(date +%d)" = 01 ]; then mkdir -p "$BACKUPS/monthly"; cp "$out" "$BACKUPS/monthly/"; fi
+  prune "$BACKUPS/daily" $KEEP_DAILY; prune "$BACKUPS/weekly" $KEEP_WEEKLY; prune "$BACKUPS/monthly" $KEEP_MONTHLY
+  mkdir -p "$STATE"; date +%s > "$STATE/last_backup"
+  [ -n "$quiet" ] || ok "Backup saved: $out ($(du -h "$out" | cut -f1))"
+
+  if mountpoint -q "$EXTERNAL" 2>/dev/null; then
+    mkdir -p "$EXTERNAL/wise"
+    # Add-only: if the box's own backups were ever deleted, the USB copies must survive.
+    if rsync -a "$BACKUPS/" "$EXTERNAL/wise/"; then
+      prune "$EXTERNAL/wise/daily" $KEEP_DAILY; prune "$EXTERNAL/wise/weekly" $KEEP_WEEKLY; prune "$EXTERNAL/wise/monthly" $KEEP_MONTHLY
+      date +%s > "$STATE/last_external"; [ -n "$quiet" ] || ok "Copied to the USB backup disk"
+    else warn "Couldn't copy to the USB backup disk"; fi
+  else
+    [ -n "$quiet" ] || warn "USB backup disk not plugged in: only this box has the backup"
+  fi
+
+  # Off-site copies (Google Drive, a cloud bucket...). Files are already encrypted. Add-only copy, so
+  # a wiped box can't wipe the cloud; old files are cleared there by age instead.
+  local remote
+  while IFS= read -r remote; do
+    [ -n "$remote" ] || continue
+    if rclone --config "$CONF/rclone.conf" copy "$BACKUPS" "$remote" --transfers 2 --retries 3 --quiet; then
+      date +%s > "$STATE/last_offsite-$(slug "$remote")"; [ -n "$quiet" ] || ok "Copied to $remote"
+      rclone --config "$CONF/rclone.conf" delete "$remote/daily" --min-age 30d --quiet 2>/dev/null || true
+      rclone --config "$CONF/rclone.conf" delete "$remote/weekly" --min-age 90d --quiet 2>/dev/null || true
+      rclone --config "$CONF/rclone.conf" delete "$remote/monthly" --min-age 400d --quiet 2>/dev/null || true
+    else warn "Copy to $remote failed (retried 3 times; tries again tomorrow)"; fi
+  done < <(offsite_list)
+}
+
+offsite_list() { [ -f "$CONF/offsite" ] && grep -v '^\s*$' "$CONF/offsite" || true; }
+slug() { printf '%s' "$1" | tr -c 'A-Za-z0-9' '_'; }
+
+prune() {  # prune DIR KEEP: delete all but the newest KEEP backups
+  local dir=$1 keep=$2
+  [ -d "$dir" ] || return 0
+  ls -1t "$dir"/wise-*.tar.age 2>/dev/null | tail -n +$((keep + 1)) | xargs -r rm -f
+}
+
+latest_backup() { ls -1t "$BACKUPS"/daily/wise-*.tar.age 2>/dev/null | head -1; }
+
+unpack_backup() {  # unpack_backup FILE KEY DEST
+  if ! age -d -i "$2" "$1" 2>/dev/null | tar -C "$3" -xf - 2>/dev/null; then
+    die "couldn't open $(basename "$1") with that key. Use the backup key saved when this box was set up"
+  fi
+  [ -s "$3/wise.dump" ] || die "this backup has no database in it (wrong key or damaged file?)"
+}
+
+verify_backup() {
+  need_root verify-backup
+  local file tmp
+  file=${1:-$(latest_backup)}
+  [ -n "$file" ] || die "no backups yet"
+  tmp=$(newtmp); TMPS+=("$tmp")
+  unpack_backup "$file" "$CONF/backup.key" "$tmp"
+  psql_db -q -c "drop database if exists wise_verify" -c "create database wise_verify" >/dev/null 2>&1
+  dc exec -T db pg_restore -U postgres -d wise_verify --no-owner --exit-on-error < "$tmp/wise.dump"
+  local bills
+  bills=$(dc exec -T db psql -U postgres -d wise_verify -tAc "select count(*) from bills")
+  psql_db -q -c "drop database wise_verify" >/dev/null
+  date +%s > "$STATE/last_verify"
+  ok "Backup $(basename "$file") restores fine ($bills bills in it)"
+}
+
+restore_backup() {
+  need_root restore
+  local file="" key="$CONF/backup.key"
+  while [ $# -gt 0 ]; do
+    case $1 in --key) key=$2; shift 2 ;; *) file=$1; shift ;; esac
+  done
+  [ -f "$file" ] || die "usage: sudo wise restore <backup file> [--key <backup key file>]"
+  [ -f "$key" ] || die "backup key not found at $key. Use the key you saved at setup: --key /path/to/wise-backup-key.txt"
+  local tmp; tmp=$(newtmp); TMPS+=("$tmp")
+  unpack_backup "$file" "$key" "$tmp"
+  say "Restoring $(basename "$file") (made on version $(cat "$tmp/VERSION" 2>/dev/null || echo '?')). Billing stops for a minute."
+  if [ -n "$(latest_backup)" ] && dc ps --status running db >/dev/null 2>&1; then
+    say "Taking a safety backup of the current data first..."; backup_now quiet || true
+  fi
+  dc stop api printer web >/dev/null 2>&1 || true
+  dc up -d db >/dev/null
+  until dc exec -T db pg_isready -U postgres >/dev/null 2>&1; do sleep 2; done
+  psql_db -q -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='wise' and pid<>pg_backend_pid()" \
+    -c "drop database if exists wise" -c "create database wise owner wise_owner" >/dev/null
+  dc exec -T db pg_restore -U postgres -d wise --no-owner --role=wise_owner --exit-on-error < "$tmp/wise.dump"
+  # Table privileges for the app role (pg_restore --no-owner doesn't carry default privileges over).
+  psql_db -q -d wise -c "grant usage on schema public to wise_app" \
+    -c "grant select, insert, update, delete on all tables in schema public to wise_app" \
+    -c "grant usage, select on all sequences in schema public to wise_app" >/dev/null
+  rm -rf "$ROOT/data/uploads.old"; [ -d "$ROOT/data/uploads" ] && mv "$ROOT/data/uploads" "$ROOT/data/uploads.old"
+  mkdir -p "$ROOT/data"; tar -C "$ROOT/data" -xf "$tmp/uploads.tar" 2>/dev/null || mkdir -p "$ROOT/data/uploads"
+  dc up -d >/dev/null
+  if wait_healthy 120; then ok "Restored. Wise is running."; else bad "Restored, but Wise didn't come back. Run: sudo wise logs api"; exit 1; fi
+}
+
+# ------------------------------------------------------------------ updates
+
+install_release() {  # install_release ZIP_OR_DIR -> prints the release dir
+  local src=$1 tmp dir ver
+  tmp=$(newtmp)
+  if [ -d "$src" ]; then cp -a "$src/." "$tmp/"; else unzip -q "$src" -d "$tmp"; fi
+  # The zip holds a single "wise" folder.
+  [ -f "$tmp/wise/VERSION" ] && tmp="$tmp/wise"
+  [ -f "$tmp/VERSION" ] && [ -f "$tmp/box/compose.yml" ] || die "that isn't a Wise release (no VERSION / box/compose.yml)"
+  ver=$(cat "$tmp/VERSION")
+  dir="$ROOT/releases/$ver"
+  [ "$dir" != "$(current_dir)" ] || die "version $ver is already installed and running"
+  rm -rf "$dir"; mkdir -p "$ROOT/releases"; mv "$tmp" "$dir"
+  chmod +x "$dir/box/wise" "$dir/box/initdb/"*.sh
+  printf '%s' "$dir"
+}
+
+update() {
+  need_root update
+  [ $# -eq 1 ] || die "usage: sudo wise update <wise-x.y.zip>"
+  local old new oldver newver
+  old=$(current_dir); oldver=$(version)
+  new=$(install_release "$1"); newver=$(cat "$new/VERSION")
+  say "Updating Wise $oldver -> $newver. Best done after closing time: billing pauses for a few minutes."
+  say "1/4 Backing up..."; backup_now quiet; local safety; safety=$(latest_backup)
+  say "2/4 Building the new version..."
+  ln -sfn "$new" "$ROOT/current"
+  if ! dc build --pull >/dev/null 2>&1 && ! dc build >/dev/null; then
+    ln -sfn "$old" "$ROOT/current"; die "the new version didn't build; still on $oldver"
+  fi
+  say "3/4 Starting it..."
+  dc up -d --remove-orphans >/dev/null
+  say "4/4 Checking it works..."
+  if wait_healthy 180; then
+    ln -sfn "$old" "$ROOT/previous"; ln -sf "$new/box/wise" "${WISE_BIN:-/usr/local/bin/wise}"
+    ok "Updated to $newver."
+  else
+    bad "Version $newver didn't start properly. Going back to $oldver and the data from just before the update."
+    ln -sfn "$old" "$ROOT/current"
+    restore_backup "$safety"
+    exit 1
+  fi
+}
+
+rollback() {
+  need_root rollback
+  local prev; prev=$(readlink -f "$ROOT/previous" 2>/dev/null || true)
+  [ -n "$prev" ] && [ -d "$prev" ] || die "there's no previous version to go back to"
+  say "Going back to $(cat "$prev/VERSION"). The data stays as it is. (If the newer version changed the database"
+  say "and the older one complains, restore the backup taken just before the update: sudo wise restore <file>.)"
+  ln -sfn "$(current_dir)" "$ROOT/previous.tmp"; ln -sfn "$prev" "$ROOT/current"; mv -T "$ROOT/previous.tmp" "$ROOT/previous"
+  dc up -d --remove-orphans >/dev/null
+  wait_healthy 120 && ok "Running $(version)" || { bad "Didn't come up. Run: sudo wise logs api"; exit 1; }
+}
+
+# ------------------------------------------------------------------ health checks and alerts
+# Every 5 minutes. A problem is reported once when it starts (and again every 6 hours while it
+# lasts), and once more when it's fixed.
+
+notify() {  # notify SUBJECT BODY
+  local subject=$1 body=$2 box; box=$(hostname)
+  # shellcheck disable=SC1091
+  [ -f "$CONF/alerts.env" ] && . "$CONF/alerts.env"
+  if [ -n "${ALERT_WEBHOOK:-}" ]; then
+    curl -fsS -m 15 -H 'content-type: application/json' \
+      -d "$(printf '{"text":%s,"box":%s}' "$(json_str "[$box] $subject: $body")" "$(json_str "$box")")" \
+      "$ALERT_WEBHOOK" >/dev/null || true
+  fi
+  if [ -n "${ALERT_EMAIL:-}" ] && [ -n "${SMTP_URL:-}" ]; then
+    local mail; mail=$(mktemp)
+    printf 'From: %s\nTo: %s\nSubject: [Wise Box %s] %s\n\n%s\n' "${SMTP_FROM:-$SMTP_USER}" "$ALERT_EMAIL" "$box" "$subject" "$body" > "$mail"
+    curl -fsS -m 30 --ssl-reqd --url "$SMTP_URL" --user "$SMTP_USER:$SMTP_PASSWORD" \
+      --mail-from "${SMTP_FROM:-$SMTP_USER}" --mail-rcpt "$ALERT_EMAIL" --upload-file "$mail" >/dev/null || true
+    rm -f "$mail"
+  fi
+  logger -t wise-box "$subject: $body" 2>/dev/null || true
+}
+json_str() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
+
+age_hours() { local f=$1; [ -f "$f" ] || { echo 99999; return; }; echo $(( ($(date +%s) - $(cat "$f")) / 3600 )); }
+
+report() {  # report ID OK|FAIL MESSAGE
+  local id=$1 status=$2 msg=$3 f="$STATE/alert-$1"
+  mkdir -p "$STATE"
+  if [ "$status" = OK ]; then
+    if [ -f "$f" ]; then notify "Fixed" "$msg"; rm -f "$f"; fi
+    [ -z "${VERBOSE:-}" ] || ok "$msg"
+  else
+    [ -z "${VERBOSE:-}" ] || bad "$msg"
+    if [ ! -f "$f" ] || [ $(( $(date +%s) - $(stat -c %Y "$f") )) -ge 21600 ]; then
+      notify "Problem" "$msg"; touch "$f"
+    fi
+  fi
+}
+
+health() {
+  need_root health
+  if curl -fsS -m 5 http://127.0.0.1/api/health >/dev/null 2>&1; then report wise OK "Wise is answering"
+  else
+    dc up -d >/dev/null 2>&1 || true   # try to bring it back by itself
+    sleep 20
+    if curl -fsS -m 5 http://127.0.0.1/api/health >/dev/null 2>&1; then report wise OK "Wise is answering (restarted itself)"
+    else report wise FAIL "Wise isn't answering. Billing devices can't reach it. Try: sudo wise restart"; fi
+  fi
+  local used; used=$(df --output=pcent "$ROOT" | tail -1 | tr -dc 0-9)
+  if [ "$used" -lt 85 ]; then report disk OK "Disk ${used}% full"; else report disk FAIL "Disk ${used}% full. Old backups or logs need clearing"; fi
+  if command -v smartctl >/dev/null; then
+    local dev; dev=$(findmnt -no SOURCE "$ROOT" | sed -E 's/p?[0-9]+$//')
+    if [ -b "$dev" ] && ! smartctl -H "$dev" 2>/dev/null | grep -qE 'PASSED|OK'; then
+      report smart FAIL "The box's disk is reporting errors ($dev). Replace it soon; backups are on the USB disk"
+    else report smart OK "Disk health fine"; fi
+  fi
+  local h; h=$(age_hours "$STATE/last_backup")
+  if [ "$h" -le 26 ]; then report backup OK "Last backup ${h} h ago"; else report backup FAIL "No backup for ${h} hours. Run: sudo wise backup"; fi
+  if mountpoint -q "$EXTERNAL" 2>/dev/null; then report usbdisk OK "USB backup disk plugged in"
+  else report usbdisk FAIL "USB backup disk isn't plugged in. Backups stay only on the box until it is"; fi
+  local remote
+  while IFS= read -r remote; do
+    h=$(age_hours "$STATE/last_offsite-$(slug "$remote")")
+    if [ "$h" -le 50 ]; then report "offsite-$(slug "$remote")" OK "Copy on $remote ${h} h ago"
+    else report "offsite-$(slug "$remote")" FAIL "Copy to $remote hasn't worked for ${h} hours (internet down, storage full, or the login expired: sudo rclone config --config $CONF/rclone.conf)"; fi
+  done < <(offsite_list)
+  if [ -n "$(env_get CLOUDFLARE_TUNNEL_TOKEN)" ]; then
+    if dc ps --status running tunnel 2>/dev/null | grep -q tunnel; then report tunnel OK "Public address connected"
+    else report tunnel FAIL "Public address is down: QR orders and remote access won't work (internet?)"; fi
+  fi
+  # Laptop as the box: its battery is the UPS. Warn on a power cut; shut down cleanly before it runs out.
+  local bat; bat=$(ls -d "${WISE_POWER_DIR:-/sys/class/power_supply}"/BAT* 2>/dev/null | head -1 || true)
+  if [ -n "$bat" ]; then
+    local st cap; st=$(cat "$bat/status" 2>/dev/null || echo Unknown); cap=$(cat "$bat/capacity" 2>/dev/null || echo 100)
+    if [ "$st" = Discharging ]; then
+      report power FAIL "Running on battery (${cap}% left): is the power off at the restaurant? Billing continues; the box shuts down safely at 12%"
+      if [ "$cap" -le 12 ]; then
+        notify "Shutting down" "Battery at ${cap}%. Wise is stopping safely; switch the box on again when the power is back."
+        dc stop >/dev/null 2>&1 || true; sync; [ -n "${WISE_NO_POWEROFF:-}" ] || systemctl poweroff
+      fi
+    else report power OK "On mains power (battery ${cap}%)"; fi
+  fi
+  if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo yes)" = yes ]; then report clock OK "Clock in sync"
+  else report clock FAIL "The box's clock isn't syncing; bill times may drift"; fi
+}
+
+status() {
+  say "Wise Box $(hostname), version $(version)"
+  say "  On the shop Wi-Fi:  http://$(box_ips | awk '{print $1}')"
+  local pub; pub=$(env_get WISE_CUSTOMER_URL); [ -n "$pub" ] && say "  Public address:    $pub"
+  VERBOSE=1 health
+  local last; last=$(latest_backup); [ -n "$last" ] && say "  Latest backup:     $(basename "$last")"
+  say "  Backup copies:     this box$(mountpoint -q "$EXTERNAL" 2>/dev/null && printf ', USB drive')$(offsite_list | sed 's/^/, /' | tr -d '\n')"
+}
+
+# ------------------------------------------------------------------ settings
+
+set_print_key() { need_root print-key; [ $# -eq 1 ] || die "usage: sudo wise print-key <key from Kitchen setup>"; env_set WISE_PRINT_KEY "$1"; dc up -d printer >/dev/null; ok "Printer bridge connected; KOTs now print on the network printers"; }
+
+set_tunnel() {
+  need_root tunnel
+  if [ "${1:-}" = off ]; then env_set CLOUDFLARE_TUNNEL_TOKEN ""; env_set WISE_CUSTOMER_URL ""; dc rm -sf tunnel >/dev/null 2>&1 || true; dc up -d api >/dev/null; ok "Public address off"; return; fi
+  [ $# -eq 2 ] || die "usage: sudo wise tunnel <tunnel token> <public address, e.g. https://pos.shakewallah.in>"
+  case $2 in https://*) ;; *) die "the public address must start with https://" ;; esac
+  env_set CLOUDFLARE_TUNNEL_TOKEN "$1"; env_set WISE_CUSTOMER_URL "${2%/}"
+  dc up -d >/dev/null
+  ok "Public address on: $2 (QR codes printed from Kitchen setup now use it)"
+}
+
+set_offsite() {
+  need_root offsite
+  case ${1:-list} in
+    add)
+      [ $# -eq 2 ] || die "usage: sudo wise offsite add <remote:path>, e.g. gdrive:WiseBackups  (connect it first: sudo rclone config --config $CONF/rclone.conf)"
+      rclone --config "$CONF/rclone.conf" mkdir "$2" || die "couldn't reach $2. Check: sudo rclone config --config $CONF/rclone.conf"
+      offsite_list | grep -qxF "$2" || printf '%s\n' "$2" >> "$CONF/offsite"
+      ok "Encrypted copies go to $2 after every backup. Copying the existing backups now..."
+      mkdir -p "$BACKUPS" "$STATE"
+      if rclone --config "$CONF/rclone.conf" copy "$BACKUPS" "$2" --quiet; then date +%s > "$STATE/last_offsite-$(slug "$2")"; ok "Copied"
+      else warn "Couldn't copy yet; it retries with the next backup"; fi ;;
+    remove)
+      [ $# -eq 2 ] || die "usage: sudo wise offsite remove <remote:path>"
+      offsite_list | grep -vxF "$2" > "$CONF/offsite.tmp" || true; mv "$CONF/offsite.tmp" "$CONF/offsite"
+      rm -f "$STATE/last_offsite-$(slug "$2")" "$STATE/alert-offsite-$(slug "$2")"; ok "Stopped copying to $2 (files already there stay)" ;;
+    list)
+      local n=0 r
+      while IFS= read -r r; do n=$((n + 1)); say "  $r  (last copy $(age_hours "$STATE/last_offsite-$(slug "$r")") h ago)"; done < <(offsite_list)
+      [ $n -gt 0 ] || say "  No off-site copies yet. Add Google Drive: sudo wise offsite add gdrive:WiseBackups" ;;
+    *) die "usage: sudo wise offsite add <remote:path> | remove <remote:path> | list" ;;
+  esac
+}
+
+set_alerts() {
+  need_root alerts
+  touch "$CONF/alerts.env"; chmod 600 "$CONF/alerts.env"
+  local kv
+  case ${1:-} in
+    webhook) [ $# -eq 2 ] || die "usage: sudo wise alerts webhook <url>"; kv="ALERT_WEBHOOK=$2" ;;
+    email)
+      [ $# -eq 2 ] || die "usage: sudo wise alerts email <your email>"
+      read -rp "SMTP server (e.g. smtps://smtp.gmail.com:465): " smtp
+      read -rp "SMTP user: " user; read -rsp "SMTP password (app password): " pw; echo
+      for kv in "ALERT_EMAIL=$2" "SMTP_URL=$smtp" "SMTP_USER=$user" "SMTP_PASSWORD=$pw"; do
+        grep -v "^${kv%%=*}=" "$CONF/alerts.env" > "$CONF/alerts.tmp" || true; printf '%s\n' "$kv" >> "$CONF/alerts.tmp"; mv "$CONF/alerts.tmp" "$CONF/alerts.env"
+      done
+      chmod 600 "$CONF/alerts.env"; ok "Alerts go to $2"; return ;;
+    test) notify "Test alert" "If you got this, Wise Box alerts work."; ok "Test alert sent"; return ;;
+    *) die "usage: sudo wise alerts email <to> | webhook <url> | test" ;;
+  esac
+  grep -v "^${kv%%=*}=" "$CONF/alerts.env" > "$CONF/alerts.tmp" || true; printf '%s\n' "$kv" >> "$CONF/alerts.tmp"; mv "$CONF/alerts.tmp" "$CONF/alerts.env"
+  chmod 600 "$CONF/alerts.env"; ok "Alerts set"
+}
+
+loadtest() {
+  need_root loadtest
+  local minutes=${1:-5} scale=${2:-3} dir; dir=$(current_dir)
+  local data=/opt/wise/loadtest-data
+  say "Starting a throwaway copy of Wise (your real bills are not touched). Best run after closing time:"
+  say "it uses the same computer, so billing would slow down while it runs."
+  rm -rf "$data"; mkdir -p "$data"
+  local lt=(env WISE_VERSION="$(version)" WISE_SRC="$dir" WISE_DATA="$data" WISE_HTTP_PORT=127.0.0.1:8089
+            WISE_SIGNUP_MODE=open WISE_OTP_PROVIDER=console COMPOSE_PROFILES=""
+            docker compose -p wise-loadtest --env-file "$ENV_FILE" -f "$dir/box/compose.yml" --project-directory "$dir/box")
+  "${lt[@]}" up -d db api web >/dev/null
+  local i=0; until curl -fsS -m 3 http://127.0.0.1:8089/api/health >/dev/null 2>&1; do sleep 3; i=$((i + 3)); [ $i -lt 180 ] || { "${lt[@]}" down -v >/dev/null 2>&1; die "the test copy didn't start"; }; done
+  local rc=0
+  python3 "$dir/box/loadtest.py" --server http://127.0.0.1:8089 --minutes "$minutes" --scale "$scale" | tee "$STATE/loadtest-$(date +%Y%m%d-%H%M).txt" || rc=$?
+  "${lt[@]}" down -v >/dev/null 2>&1 || true
+  rm -rf "$data"
+  say "Report saved in $STATE/. The test copy is removed."
+  return $rc
+}
+
+usb_prepare() {
+  need_root usb-prepare
+  say "USB drives connected:"
+  lsblk -dpno NAME,SIZE,MODEL,TRAN | awk '$NF=="usb"' | sed 's/^/  /'
+  read -rp "Which drive is the backup drive (e.g. /dev/sdb)? " dev
+  [ -b "$dev" ] || die "$dev isn't a drive"
+  lsblk -dno TRAN "$dev" | grep -q usb || die "$dev isn't a USB drive; refusing to erase it"
+  read -rp "Everything on $dev will be erased. Type ERASE to continue: " yes
+  [ "$yes" = ERASE ] || die "cancelled"
+  umount "$dev"* 2>/dev/null || true
+  wipefs -aq "$dev"
+  printf 'label: gpt\n,,L\n' | sfdisk -q "$dev"
+  sleep 2
+  local part; part=$(lsblk -lnpo NAME "$dev" | sed -n 2p)
+  mkfs.ext4 -q -F -L WISEBACKUP "$part"
+  mkdir -p "$EXTERNAL"; systemctl daemon-reload; mount "$EXTERNAL" 2>/dev/null || mount "$part" "$EXTERNAL"
+  ok "USB backup drive ready. Leave it plugged in; every backup is copied to it."
+  backup_now
+}
+
+cmd=${1:-status}; [ $# -gt 0 ] && shift
+case $cmd in
+  status) status ;;
+  backup) backup_now ;;
+  verify-backup) verify_backup "$@" ;;
+  restore) restore_backup "$@" ;;
+  update) update "$@" ;;
+  rollback) rollback ;;
+  print-key) set_print_key "$@" ;;
+  tunnel) set_tunnel "$@" ;;
+  offsite) set_offsite "$@" ;;
+  alerts) set_alerts "$@" ;;
+  health) health ;;
+  logs) dc logs --tail 200 "$@" ;;
+  usb-prepare) usb_prepare ;;
+  loadtest) loadtest "$@" ;;
+  login-code)
+    need_root login-code
+    code=$(dc logs --since 15m api 2>/dev/null | grep -o 'OTP for .*' | tail -1)
+    [ -n "$code" ] && say "  ${code/OTP for/Code for}" || say "  No sign-in code in the last 15 minutes. Tap \"Send code\" on the sign-in screen first." ;;
+  start) need_root start; dc up -d; wait_healthy 120 && ok "Wise is running" ;;
+  stop) need_root stop; dc stop ;;
+  restart) need_root restart; dc restart; wait_healthy 120 && ok "Wise is running" ;;
+  alerts-notify) notify "$1" "$2" ;;   # used by the weekly backup test
+  -h|--help|help) awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0" ;;
+  *) die "unknown command '$cmd'. Try: wise help" ;;
+esac
