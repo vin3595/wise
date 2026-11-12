@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import InstallApp from "./components/InstallApp";
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { useSession } from "./session";
 import Setup from "./pages/Setup";
 import Login from "./pages/Login";
@@ -38,54 +38,53 @@ import GettingStarted from "./pages/GettingStarted";
 
 function Shell({ children }: { children: ReactNode }) {
   const { branding, me, can, signOut } = useSession();
-  // [path, label, allowed, group]. The group decides the heading the link sits under in the phone menu.
-  const links: [string, string, boolean, string][] = [
-    ["/", "Home", can("tenant.settings") || can("menu.override"), "Counter"],
-    ["/orders", "Orders", can("kot.send"), "Counter"],
-    ["/kds", "Kitchen display", can("kds.view"), "Counter"],
-    ["/bills", "Bills", can("billing"), "Counter"],
-    ["/cash", "Cash", can("cash.expected"), "Money"],
-    ["/day-close", "Day close", can("day.close"), "Money"],
-    ["/accounts", "Accounts", can("reports.view"), "Money"],
-    ["/reports", "Reports", can("reports.view"), "Business"],
-    ["/stock", "Stock", can("stock.count"), "Business"],
-    ["/customers", "Customers", can("loyalty.manage"), "Business"],
+  // One menu entry per job. An entry with several pages opens on the first one you may use, and the
+  // others show as tabs along the top of the page, so the menu stays short.
+  type Page = [string, string, boolean];
+  type Entry = { label: string; section: string; pages: Page[] };
+  const entries: Entry[] = [
+    { label: "Home", section: "Counter", pages: [["/", "Home", can("tenant.settings") || can("menu.override")]] },
+    { label: "Orders", section: "Counter", pages: [["/orders", "Orders", can("kot.send")]] },
+    { label: "Kitchen display", section: "Counter", pages: [["/kds", "Kitchen display", can("kds.view")]] },
+    { label: "Bills", section: "Counter", pages: [["/bills", "Bills", can("billing")]] },
+    { label: "Cash", section: "Money", pages: [["/cash", "Cash", can("cash.expected")], ["/day-close", "Day close", can("day.close")]] },
+    { label: "Reports", section: "Money", pages: [["/reports", "Reports", can("reports.view")], ["/accounts", "Accounts and Tally", can("reports.view")]] },
+    { label: "Stock", section: "Stock and customers", pages: [["/stock", "Stock", can("stock.count")]] },
+    { label: "Customers", section: "Stock and customers", pages: [["/customers", "Customers", can("loyalty.manage")]] },
+    { label: "Getting started", section: "Setup", pages: [["/start", "Getting started", can("tenant.settings")]] },
+    { label: "Menu", section: "Setup", pages: [["/menu", "Items", can("menu.manage")], ["/outlet-menu", "Outlet prices", can("menu.override")],
+      ["/tax", "Tax", can("menu.manage")], ["/kitchen", "Kitchen and printers", can("menu.manage") || can("outlets.manage")]] },
+    { label: "Outlets and screens", section: "Setup", pages: [["/outlets", "Outlets", can("outlets.manage")], ["/screens", "Screens", can("outlets.manage")],
+      ["/screen-ads", "Screen ads", can("ads.manage")]] },
+    { label: "Staff", section: "Setup", pages: [["/users", "Staff", can("users.manage")], ["/access", "Who can do what", can("users.manage")]] },
+    { label: "Settings", section: "Setup", pages: [["/payments", "Payments", can("tenant.settings")], ["/sms", "SMS", can("tenant.settings")],
+      ["/branding", "Branding", can("tenant.settings")]] },
   ];
-  // Set-up pages live on a second row, opened with "Setup", so the daily screens stay one tap away.
-  const setup: [string, string, boolean, string][] = [
-    ["/start", "Getting started", can("tenant.settings"), "Start here"],
-    ["/menu", "Menu", can("menu.manage"), "Menu and tax"],
-    ["/outlet-menu", "Outlet menu", can("menu.override"), "Menu and tax"],
-    ["/tax", "Tax", can("menu.manage"), "Menu and tax"],
-    ["/kitchen", "Kitchen setup", can("menu.manage") || can("outlets.manage"), "Menu and tax"],
-    ["/outlets", "Outlets", can("outlets.manage"), "Outlets and screens"],
-    ["/screens", "Screens", can("outlets.manage"), "Outlets and screens"],
-    ["/screen-ads", "Screen ads", can("ads.manage"), "Outlets and screens"],
-    ["/users", "Staff", can("users.manage"), "People"],
-    ["/access", "Who can do what", can("users.manage"), "People"],
-    ["/payments", "Payments", can("tenant.settings"), "Business details"],
-    ["/sms", "SMS", can("tenant.settings"), "Business details"],
-    ["/branding", "Branding", can("tenant.settings"), "Business details"],
-  ];
-  const setupLinks = setup.filter(([, , show]) => show);
+  const path = location.pathname;
+  const onPage = (to: string) => to === "/" ? path === "/" : path === to || path.startsWith(to + "/");
+  const visible = entries.map((e) => ({ ...e, pages: e.pages.filter(([, , ok]) => ok) })).filter((e) => e.pages.length > 0);
+  const daily = visible.filter((e) => e.section !== "Setup");
+  const setupEntries = visible.filter((e) => e.section === "Setup");
+  const current = visible.find((e) => e.pages.some(([to]) => onPage(to)));
+  const onSetup = current?.section === "Setup";
   const [showSetup, setShowSetup] = useState(() => { try { return localStorage.getItem("wise.nav_setup") === "1"; } catch { return false; } });
-  const onSetup = setupLinks.some(([to]) => location.pathname === to || location.pathname.startsWith(to + "/"));
   // Phones: the links live in a drawer opened from the top bar; it closes when a page opens.
   const [drawer, setDrawer] = useState(false);
-  const shown = links.filter(([, , show]) => show);
-  // Setup in the phone menu stays folded unless you're already on a setup page.
-  const [drawerSetup, setDrawerSetup] = useState(false);
-  const setupOpen = drawerSetup || onSetup;
-  const grouped = (list: [string, string, boolean, string][]) => {
-    const out: [string, [string, string, boolean, string][]][] = [];
-    for (const l of list) { const g = out.find(([name]) => name === l[3]); if (g) g[1].push(l); else out.push([l[3], [l]]); }
+  // Keep the open tab in view when the tab row is wider than a phone.
+  useEffect(() => { try { document.querySelector(".page-tabs a.on")?.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch { /* old browsers */ } }, [path]);
+  const entryLink = (e: Entry) => (
+    <Link key={e.label} to={e.pages[0][0]} className={current?.label === e.label ? "active" : ""}>{e.label}</Link>
+  );
+  const sections = (list: Entry[]) => {
+    const out: [string, Entry[]][] = [];
+    for (const e of list) { const g = out.find(([n]) => n === e.section); if (g) g[1].push(e); else out.push([e.section, [e]]); }
     return out;
   };
   return (
     <div className={`shell ${me?.training ? "is-training" : ""}`}>
       {me?.training && <div className="training-bar" role="status">Training: practice only. Nothing here is a real bill, payment, stock or sale.</div>}
       <header className="topbar">
-        {(shown.length > 1 || setupLinks.length > 0) && (
+        {visible.length > 1 && (
           <button className="menu-btn" aria-expanded={drawer} aria-controls="app-drawer" onClick={() => setDrawer(!drawer)}>
             <span aria-hidden>{drawer ? "✕" : "☰"}</span><span className="sr-only">{drawer ? "Close menu" : "Open menu"}</span>
           </button>
@@ -105,45 +104,27 @@ function Shell({ children }: { children: ReactNode }) {
           <nav id="app-drawer" className="drawer" aria-label="Menu"
             onClick={(e) => { e.stopPropagation(); if ((e.target as HTMLElement).closest("a")) setDrawer(false); }}>
             <p className="drawer-who">{me?.user.name} · {me?.user.role}</p>
-            {grouped(shown).map(([name, items]) => (
+            {sections(visible).map(([name, list]) => (
               <section key={name} className="drawer-group" aria-label={name}>
-                {shown.length > 4 && <p className="drawer-head">{name}</p>}
-                {items.map(([to, label]) => <NavLink key={to} to={to} end={to === "/"}>{label}</NavLink>)}
+                {visible.length > 4 && <p className="drawer-head">{name}</p>}
+                {list.map(entryLink)}
               </section>
             ))}
-            {setupLinks.length > 0 && (
-              <section className="drawer-group drawer-setup">
-                <button className="drawer-fold" aria-expanded={setupOpen} aria-controls="drawer-setup-links"
-                  onClick={() => setDrawerSetup(!setupOpen)}>
-                  <span>Setup</span><span className="muted">{setupOpen ? "Hide" : `${setupLinks.length} pages`}</span>
-                  <span aria-hidden>{setupOpen ? "▴" : "▾"}</span>
-                </button>
-                {setupOpen && (
-                  <div id="drawer-setup-links">
-                    {grouped(setupLinks).map(([name, items]) => (
-                      <div key={name} className="drawer-sub">
-                        <p className="drawer-subhead">{name}</p>
-                        {items.map(([to, label]) => <NavLink key={to} to={to}>{label}</NavLink>)}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
             <button className="link drawer-out" onClick={signOut}>Sign out</button>
           </nav>
         </div>
       )}
       <nav className="nav">
-        {shown.map(([to, label]) => (
-          <NavLink key={to} to={to} end={to === "/"}>{label}</NavLink>
-        ))}
-        {setupLinks.length > 0 && <button className={`nav-more ${showSetup || onSetup ? "open" : ""}`} aria-expanded={showSetup || onSetup}
+        {daily.map(entryLink)}
+        {setupEntries.length > 0 && <button className={`nav-more ${showSetup || onSetup ? "open" : ""}`} aria-expanded={showSetup || onSetup}
           onClick={() => { const v = !(showSetup || onSetup); setShowSetup(v); try { localStorage.setItem("wise.nav_setup", v ? "1" : "0"); } catch { /* */ } }}>Setup {showSetup || onSetup ? "▴" : "▾"}</button>}
       </nav>
-      {(showSetup || onSetup) && setupLinks.length > 0 && (
-        <nav className="nav subnav" aria-label="Setup">
-          {setupLinks.map(([to, label]) => <NavLink key={to} to={to}>{label}</NavLink>)}
+      {(showSetup || onSetup) && setupEntries.length > 0 && (
+        <nav className="nav subnav" aria-label="Setup">{setupEntries.map(entryLink)}</nav>
+      )}
+      {current && current.pages.length > 1 && (
+        <nav className="page-tabs" aria-label={current.label}>
+          {current.pages.map(([to, label]) => <Link key={to} to={to} className={onPage(to) ? "on" : ""} aria-current={onPage(to) ? "page" : undefined}>{label}</Link>)}
         </nav>
       )}
       <main className="main">{children}</main>

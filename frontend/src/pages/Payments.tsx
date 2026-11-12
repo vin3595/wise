@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { Button, Card, ErrorText, Field, Input, Select, Toggle, useAction } from "../ui";
+import { Button, Card, ErrorText, Field, Input, Select, Toggle, useAction, Tab, Tabs } from "../ui";
 import type { Outlet } from "../types";
 import { QrImage } from "../qr";
 import { formatPaise } from "../money";
@@ -36,7 +36,8 @@ export default function Payments() {
   return (
     <div className="stack">
       <h1>Payments</h1>
-      <Card title="UPI that confirms itself">
+      <Tabs id="payments">
+      <Tab label="UPI"><Card title="UPI that confirms itself">
         <p className="muted">Each bill gets its own UPI QR for the exact amount. When the customer pays, the bill prints by itself with the UPI reference: nobody checks a phone, and a fake "payment done" screen can't fool the counter. Money goes straight to your own Paytm or Razorpay account.</p>
         <Toggle checked={s.enabled} onChange={(v) => set({ enabled: v })} label="Use it at the billing counters" />
         <div className="seg three">
@@ -83,8 +84,8 @@ export default function Payments() {
         <ErrorText error={error} />
         {saved && <p className="ok">Saved.</p>}
         <Button disabled={busy} onClick={save}>Save</Button>
-      </Card>
-      <Card title="Card machines (Razorpay POS)">
+      </Card></Tab>
+      <Tab label="Card machines"><Card title="Card machines (Razorpay POS)">
         <p className="muted">Tap Card on the counter and the bill amount appears on that counter's card machine by itself. When the card is approved, the bill prints with the card's last 4 digits and approval code. No typing the amount, no wrong amounts.</p>
         <Toggle checked={s.pos_enabled} onChange={(v) => set({ pos_enabled: v })} label="Link the card machines" />
         <div className="seg two">
@@ -117,7 +118,8 @@ export default function Payments() {
           <Button variant="ghost" disabled={busy || !tName.trim() || tDev.trim().length < 3} onClick={() => run(async () => { await api(`/outlets/${outletId}/card-terminals`, { body: { name: tName, device_id: tDev } }); setTName(""); setTDev(""); setTerms(await api<Terminal[]>(`/outlets/${outletId}/card-terminals`)); })}>Add machine</Button>
         </div>
         <p className="muted small">Each billing counter is asked once which machine sits next to it. If a machine can't be reached, the counter falls back to typing the amount on the machine and tapping Card received.</p>
-      </Card>
+      </Card></Tab>
+      </Tabs>
     </div>
   );
 }

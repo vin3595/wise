@@ -3,7 +3,7 @@ import { api } from "../api";
 import { useSession } from "../session";
 import type { Brand, Tenant, UiTheme } from "../types";
 import { THEMES } from "../themes";
-import { Button, Card, ErrorText, Field, Input, useAction } from "../ui";
+import { Button, Card, ErrorText, Field, Input, useAction, Tab, Tabs } from "../ui";
 
 export default function Branding() {
   const { me, refresh, chooseRestaurant } = useSession();
@@ -23,6 +23,8 @@ export default function Branding() {
     <div className="stack">
       <h1>Branding</h1>
       <p className="muted">This is what your staff and customers see: on the login screen, the app, bills and the installed app icon.</p>
+      <Tabs id="branding">
+      <Tab label="Logo and look">
       <Card title="Logo">
         <div className="logo-row">
           {t?.logo_url ? <img className="logo-preview" src={t.logo_url} alt="Current logo" /> : <span className="logo-fallback big">{(t?.app_name || t?.name || "W")[0]}</span>}
@@ -54,7 +56,8 @@ export default function Branding() {
         </div>
         <ErrorText error={look.error} />
       </Card>
-      <Card title="Name and colour">
+      </Tab>
+      <Tab label="Name and colour"><Card title="Name and colour">
         <form onSubmit={(e) => {
           e.preventDefault();
           setSaved(false);
@@ -76,8 +79,9 @@ export default function Branding() {
           <Button disabled={save.busy}>Save</Button>
           {saved && <span className="ok">Saved</span>}
         </form>
-      </Card>
-      <Brands />
+      </Card></Tab>
+      <Tab label="Brands"><Brands /></Tab>
+      </Tabs>
     </div>
   );
 }

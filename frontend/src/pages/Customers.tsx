@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { formatPaise, inputToPaise, paiseToInput } from "../money";
-import { Button, Card, ErrorText, Field, Input, Select, useAction } from "../ui";
+import { Button, Card, ErrorText, Field, Input, Select, useAction, Tab, Tabs } from "../ui";
 
 interface Rules { mode: "off" | "points" | "stamps" | "both"; earn_bp: number; min_bill_paise: number; redeem_min_paise: number; max_redeem_bp: number; expiry_days: number;
   stamp_min_paise: number; stamps_needed: number; reward_paise: number; reward_label: string }
@@ -46,6 +46,33 @@ export default function Customers() {
   return (
     <div className="stack">
       <h1>Customers</h1>
+      <Tabs id="customers">
+      <Tab label="Customers">
+      <Card title={`Customers (${list.length})`}>
+        <div className="row">
+          <Input style={{ flex: 1 }} placeholder="Find by mobile or name" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort customers">
+            <option value="spent">Spent most</option><option value="visits">Most visits</option><option value="recent">Visited recently</option>
+            <option value="lapsing">Not seen for longest</option><option value="points">Most points</option>
+          </Select>
+        </div>
+        <table className="table">
+          <thead><tr><th>Customer</th><th className="num">Visits</th><th className="num">Spent</th><th className="num">Average</th>{showP && <th className="num">Points</th>}{showS && <th className="num">Stamps</th>}<th>Last visit</th></tr></thead>
+          <tbody>
+            {list.map((c) => (
+              <tr key={c.id} onClick={() => setOpen(c)} className="clickable">
+                <td>{c.name || "–"}<div className="muted small">{c.phone}</div></td>
+                <td className="num">{c.visits}</td><td className="num">{formatPaise(c.spent_paise)}</td><td className="num">{formatPaise(c.avg_paise)}</td>
+                {showP && <td className="num">{formatPaise(c.points_paise)}</td>}{showS && <td className="num">{c.stamps}</td>}
+                <td className="small">{c.last_visit || "–"}</td>
+              </tr>
+            ))}
+            {list.length === 0 && <tr><td colSpan={7} className="muted">Customers appear here once they give their mobile number on a bill.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+      </Tab>
+      <Tab label="Loyalty rules">
       <Card title="Loyalty">
         <div className="mode-pick">
           {MODES.map(([m, label, help]) => (
@@ -78,30 +105,8 @@ export default function Customers() {
         {saved && <p className="ok">Saved.</p>}
         <Button disabled={busy} onClick={save}>Save</Button>
       </Card>
-
-      <Card title={`Customers (${list.length})`}>
-        <div className="row">
-          <Input style={{ flex: 1 }} placeholder="Find by mobile or name" value={q} onChange={(e) => setQ(e.target.value)} />
-          <Select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort customers">
-            <option value="spent">Spent most</option><option value="visits">Most visits</option><option value="recent">Visited recently</option>
-            <option value="lapsing">Not seen for longest</option><option value="points">Most points</option>
-          </Select>
-        </div>
-        <table className="table">
-          <thead><tr><th>Customer</th><th className="num">Visits</th><th className="num">Spent</th><th className="num">Average</th>{showP && <th className="num">Points</th>}{showS && <th className="num">Stamps</th>}<th>Last visit</th></tr></thead>
-          <tbody>
-            {list.map((c) => (
-              <tr key={c.id} onClick={() => setOpen(c)} className="clickable">
-                <td>{c.name || "–"}<div className="muted small">{c.phone}</div></td>
-                <td className="num">{c.visits}</td><td className="num">{formatPaise(c.spent_paise)}</td><td className="num">{formatPaise(c.avg_paise)}</td>
-                {showP && <td className="num">{formatPaise(c.points_paise)}</td>}{showS && <td className="num">{c.stamps}</td>}
-                <td className="small">{c.last_visit || "–"}</td>
-              </tr>
-            ))}
-            {list.length === 0 && <tr><td colSpan={7} className="muted">Customers appear here once they give their mobile number on a bill.</td></tr>}
-          </tbody>
-        </table>
-      </Card>
+      </Tab>
+      </Tabs>
       {open && <CustomerPanel c={open} onClose={() => { setOpen(null); setSaved((x) => !x); }} />}
     </div>
   );

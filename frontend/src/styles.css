@@ -955,3 +955,26 @@ tr.picked td { background: var(--wash); }
 
 fieldset.field-group { border: 0; padding: 0; margin: 0; min-width: 0; }
 fieldset.field-group > legend { padding: 0; margin-bottom: 0.35rem; }
+
+/* Tabs for pages that share one menu entry (Menu: Items / Outlet prices / Tax…) */
+.page-tabs { display: flex; gap: 0.3rem; overflow-x: auto; padding: 0.5rem 1rem 0; scrollbar-width: none; }
+.page-tabs::-webkit-scrollbar { display: none; }
+.page-tabs a { flex: none; padding: 0.5rem 0.9rem; border-radius: 999px; border: 1px solid var(--line-2); background: var(--card); color: var(--ink); text-decoration: none; font-weight: 600; font-size: 0.92rem; white-space: nowrap; }
+.shell .page-tabs a { color: var(--ink); text-decoration: none; }
+.shell .page-tabs a.on { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.page-tabs a:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+/* Sections inside one page, shown one at a time */
+.subtabs { display: flex; gap: 0.2rem; overflow-x: auto; border-bottom: 1px solid var(--line-2); scrollbar-width: none; margin-bottom: 0.2rem; }
+.subtabs::-webkit-scrollbar { display: none; }
+.subtabs button { flex: none; border: 0; background: none; font: inherit; font-weight: 600; font-size: 0.92rem; color: var(--ink-2); padding: 0.6rem 0.8rem; border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap; }
+.subtabs button.on { color: var(--ink); border-bottom-color: var(--brand); }
+.subtabs button:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.tab-panel { display: flex; flex-direction: column; gap: inherit; }
+/* Who can do what: on phones, one role's column at a time */
+.role-pick { display: none; }
+@media (max-width: 759px) {
+  .role-pick { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.6rem; }
+  .role-pick .choice { margin: 0; }
+  table.access th.other, table.access td.other { display: none; }
+  table.access td, table.access th { white-space: normal; }
+}

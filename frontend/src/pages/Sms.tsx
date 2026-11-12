@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { Button, Card, ErrorText, Input, Select, Toggle, useAction } from "../ui";
+import { Button, Card, ErrorText, Input, Select, Toggle, useAction, Tab, Tabs } from "../ui";
 
 interface Settings {
   enabled: boolean; provider: "msg91" | "log"; has_auth_key: boolean; sender_id: string | null;
@@ -52,7 +52,8 @@ export default function Sms() {
   return (
     <div className="stack">
       <h1>SMS</h1>
-      <Card title="Messages">
+      <Tabs id="sms">
+      <Tab label="Messages"><Card title="Messages">
         <Toggle checked={s.enabled} onChange={(v) => set({ enabled: v })} label="Send SMS" />
         <p className="muted small">Each message below shows the exact text to register for DLT; the ##…## parts are filled in for each customer.</p>
         <div className="sms-kinds">
@@ -74,9 +75,8 @@ export default function Sms() {
           </Select></label>
         <label className="field"><span className="field-label">Day-end summary and alerts go to</span>
           <Input placeholder="Mobile numbers, comma separated (up to 5)" value={daily} onChange={(e) => { setDaily(e.target.value); setSaved(false); }} /></label>
-      </Card>
-
-      <Card title="Sending">
+      </Card></Tab>
+      <Tab label="Sending"><Card title="Sending">
         <label className="field"><span className="field-label">How to send</span>
           <Select value={s.provider} onChange={(e) => set({ provider: e.target.value as Settings["provider"] })}>
             <option value="log">Testing: write messages to the log only (nothing is sent)</option>
@@ -104,16 +104,14 @@ export default function Sms() {
           {saved && <span className="ok">Saved</span>}
         </div>
         <ErrorText error={error} />
-      </Card>
-
-      <Card title="Send a test">
+      </Card></Tab>
+      <Tab label="Send a test"><Card title="Send a test">
         <div className="row">
           <Input inputMode="tel" placeholder="Your mobile" value={testTo} onChange={(e) => setTestTo(e.target.value)} />
           <Button disabled={busy || !testTo} onClick={() => run(async () => { await api("/tenant/sms/test", { body: { phone: testTo } }); setLog(await api<Msg[]>("/sms/messages")); })}>Send test SMS</Button>
         </div>
-      </Card>
-
-      <Card title="Today's messages">
+      </Card></Tab>
+      <Tab label="Today's messages"><Card title="Today's messages">
         <table className="table">
           <thead><tr><th>Time</th><th>Message</th><th>To</th><th>Text</th><th>Status</th></tr></thead>
           <tbody>
@@ -130,7 +128,8 @@ export default function Sms() {
             {log.length === 0 && <tr><td colSpan={5} className="muted">No messages today.</td></tr>}
           </tbody>
         </table>
-      </Card>
+      </Card></Tab>
+      </Tabs>
     </div>
   );
 }

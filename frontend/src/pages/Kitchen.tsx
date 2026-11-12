@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useSession } from "../session";
 import type { Outlet, PrepArea } from "../types";
-import { Button, Card, ErrorText, Input, Select, Toggle, useAction } from "../ui";
+import { Button, Card, ErrorText, Input, Select, Toggle, useAction, Tab, Tabs } from "../ui";
 import { QrImage } from "../qr";
 import PrintRouting from "../components/PrintRouting";
 import { createPortal } from "react-dom";
@@ -40,6 +40,8 @@ export default function Kitchen() {
   return (
     <div className="stack">
       <h1>Kitchen setup</h1>
+      <Tabs id="kitchen">
+      <Tab label="Preparation areas">
       <Card title="Preparation areas">
         <p className="muted">Each item is made at one area. An order with a shake and fries makes two KOTs, one for each area, each printed on that area's printer, and each area's KDS screen shows only its own tickets. Set an item's area under Menu, or in the "Prep Area" column of the Excel import.</p>
         <ul className="list">
@@ -71,12 +73,11 @@ export default function Kitchen() {
         )}
         <ErrorText error={error} />
       </Card>
-
-
-      {can("menu.manage") && areas.length > 0 && <PrintRouting areas={areas} />}
+      </Tab>
+      {can("menu.manage") && areas.length > 0 && <Tab label="Which items print where"><PrintRouting areas={areas} /></Tab>}
 
       {can("outlets.manage") && (
-        <Card title="KOT printing">
+        <Tab label="KOT printing"><Card title="KOT printing">
           <p className="muted">Each KOT prints by itself on its area's printer, once. Reprints come out marked "Reprint", and if an order is cancelled after its KOT printed, the kitchen gets a "Cancelled" slip.</p>
           <ul className="print-ways">
             <li><strong>Network printers</strong> (LAN or Wi-Fi): enter each area's printer address above, then run the Wise print bridge on any PC in the outlet. It's one small file; the setup steps are in print-bridge/README.</li>
@@ -109,11 +110,11 @@ export default function Kitchen() {
             </tbody>
           </table>
           <ErrorText error={error} />
-        </Card>
+        </Card></Tab>
       )}
 
       {can("outlets.manage") && (
-        <Card title="QR ordering and self-order kiosk">
+        <Tab label="QR and kiosk"><Card title="QR ordering and self-order kiosk">
           <p className="muted">Switch these on per outlet under Outlets. Print one QR per table; customers scan it, order, and the order waits under "Waiting for you" on the Orders screen until staff accept it. The kiosk link runs on a touch-screen monitor in full screen.</p>
           <table className="table">
             <thead><tr><th>Outlet</th><th>QR ordering</th><th>Kiosk</th><th /></tr></thead>
@@ -131,12 +132,11 @@ export default function Kitchen() {
               ))}
             </tbody>
           </table>
-        </Card>
+        </Card></Tab>
       )}
-      {sheet && <QrSheet outlet={sheet} url={(t) => qrUrl(sheet, t)} onDone={() => setSheet(null)} />}
 
       {can("outlets.manage") && (
-        <Card title="Customer order-ready screen">
+        <Tab label="Order-ready screen"><Card title="Customer order-ready screen">
           <p className="muted">Open this link on the TV or tablet facing customers. It shows token numbers under Preparing and Ready (with car numbers for takeaway). No login needed; anyone with the link can see token numbers only.</p>
           <table className="table">
             <thead><tr><th>Outlet</th><th>Display link</th><th /></tr></thead>
@@ -157,8 +157,10 @@ export default function Kitchen() {
               ))}
             </tbody>
           </table>
-        </Card>
+        </Card></Tab>
       )}
+      </Tabs>
+      {sheet && <QrSheet outlet={sheet} url={(t) => qrUrl(sheet, t)} onDone={() => setSheet(null)} />}
     </div>
   );
 }

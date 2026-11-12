@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { Button, Card, ErrorText, Field, Select, useAction } from "../ui";
+import { Button, Card, ErrorText, Field, Select, useAction, Tab, Tabs } from "../ui";
 import type { Outlet, PrepArea } from "../types";
 import InstallApp from "../components/InstallApp";
 
@@ -65,12 +65,12 @@ export default function Screens() {
   const slugOf = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "screen";
   const kitchenUrl = `${origin}/kitchen/${o.kitchen_key}?kiosk=1${kitchenArea ? `&area=${kitchenArea}` : ""}`;
   const areaName = kitchenArea === "__kitchen" ? "No prep area" : areas.find((a) => a.id === kitchenArea)?.name;
-  const rows: { kind: Kind; title: string; what: string; url?: string; show: boolean }[] = [
-    { kind: "counter", title: "Billing counter (with customer screen)", what: "Main monitor: Orders, the cashier signs in with their PIN. Bills print straight to the bill printer, no print dialog (make it Windows' default printer). Second monitor: the customer screen with your ads, full screen, nobody can touch it unless the cashier asks for their number.", show: true },
-    { kind: "kitchen", title: `Kitchen display${areaName ? `: ${areaName}` : ""}`, what: "Signs itself in. No chef PIN, no daily login. Sound on by itself.", url: kitchenUrl, show: true },
-    { kind: "display", title: "Order status TV", what: "Token numbers: being prepared / ready to collect. Chime on by itself.", url: `${origin}/display/${o.display_key}?kiosk=1`, show: true },
-    { kind: "kiosk", title: "Self-order kiosk", what: "Customers order and pay on the touch screen. Resets itself after 90 seconds idle.", url: `${origin}/kiosk/${o.qr_key}?kiosk=1`, show: o.kiosk_enabled },
-    { kind: "print", title: "KOT print station", what: "The PC with the USB/LAN kitchen printer. Prints by itself.", url: `${origin}/print/${o.print_key}?kiosk=1`, show: o.print_kots },
+  const rows: { kind: Kind; tab: string; title: string; what: string; url?: string; show: boolean }[] = [
+    { kind: "counter", tab: "Billing counter", title: "Billing counter (with customer screen)", what: "Main monitor: Orders, the cashier signs in with their PIN. Bills print straight to the bill printer, no print dialog (make it Windows' default printer). Second monitor: the customer screen with your ads, full screen, nobody can touch it unless the cashier asks for their number.", show: true },
+    { kind: "kitchen", tab: "Kitchen", title: `Kitchen display${areaName ? `: ${areaName}` : ""}`, what: "Signs itself in. No chef PIN, no daily login. Sound on by itself.", url: kitchenUrl, show: true },
+    { kind: "display", tab: "Order status TV", title: "Order status TV", what: "Token numbers: being prepared / ready to collect. Chime on by itself.", url: `${origin}/display/${o.display_key}?kiosk=1`, show: true },
+    { kind: "kiosk", tab: "Kiosk", title: "Self-order kiosk", what: "Customers order and pay on the touch screen. Resets itself after 90 seconds idle.", url: `${origin}/kiosk/${o.qr_key}?kiosk=1`, show: o.kiosk_enabled },
+    { kind: "print", tab: "Print station", title: "KOT print station", what: "The PC with the USB/LAN kitchen printer. Prints by itself.", url: `${origin}/print/${o.print_key}?kiosk=1`, show: o.print_kots },
   ];
 
   return (
@@ -82,8 +82,9 @@ export default function Screens() {
       </div>
       <ErrorText error={act.error} />
 
+      <Tabs id="screens">
       {rows.filter((r) => r.show).map((r) => (
-        <Card key={r.kind} title={r.title}>
+        <Tab key={r.kind} label={r.tab}><Card title={r.title}>
           <p className="muted small">{r.what}</p>
           {r.kind === "kitchen" && areas.length > 0 && (
             <div className="grid2" style={{ maxWidth: "40rem" }}>
@@ -120,10 +121,10 @@ export default function Screens() {
               });
             }}>New kitchen link</button>}
           </div>
-        </Card>
+        </Card></Tab>
       ))}
 
-      <Card title="Install Wise as an app on this device">
+      <Tab label="Install the app"><Card title="Install Wise as an app on this device">
         <p className="muted small">The installed app opens from its own icon, full screen, without the browser's address bar. It updates itself whenever Wise is updated.</p>
         <InstallApp full />
         <ul className="steps">
@@ -131,9 +132,9 @@ export default function Screens() {
           <li><strong>Windows PC:</strong> open Wise in Chrome or Edge and click the install icon at the right end of the address bar, or ⋮ &gt; <strong>Install Wise</strong>.</li>
           <li><strong>iPhone or iPad:</strong> open Wise in Safari, tap Share and then <strong>Add to Home Screen</strong>.</li>
         </ul>
-      </Card>
+      </Card></Tab>
 
-      <Card title="How to set up a screen (once)">
+      <Tab label="How to set up"><Card title="How to set up a screen (once)">
         <ol className="steps">
           <li><strong>Windows PC or mini-PC:</strong> download its start-up file above, press Win+R, type <code>shell:startup</code>, press Enter and drop the file in that folder. Restart once to check. Set the PC to log in to Windows by itself and to never sleep.</li>
           <li><strong>Android TV box, Fire TV stick or tablet:</strong> install a kiosk browser app that has "start on boot" (for example Fully Kiosk Browser), paste the screen's link as its start page and turn on start on boot.</li>
@@ -141,7 +142,8 @@ export default function Screens() {
           <li><strong>Touch on the dual-screen counter:</strong> once, in Windows Control Panel &gt; Tablet PC Settings &gt; Setup, tap the customer screen when asked, so touches land on the right monitor.</li>
         </ol>
         <p className="muted small">Each link only opens that one screen for this outlet. If a link gets out, make a new one: kitchen links here, the TV link under Outlets.</p>
-      </Card>
+      </Card></Tab>
+      </Tabs>
     </div>
   );
 }

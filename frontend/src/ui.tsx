@@ -1,4 +1,4 @@
-import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { Children, isValidElement, useState, type ReactElement, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 
 export function Button({ variant = "primary", className = "", ...props }:
   ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" | "danger" }) {
@@ -83,4 +83,28 @@ export function useAction() {
 export function FoodDot({ type }: { type: "veg" | "non_veg" | "egg" }) {
   const label = type === "veg" ? "Veg" : type === "egg" ? "Egg" : "Non-veg";
   return <span className={`food-dot food-${type}`} title={label} aria-label={label} />;
+}
+
+/** One section of a <Tabs> page. */
+export function Tab({ children }: { label: string; children: ReactNode }) { return <>{children}</>; }
+
+/** Shows one section of a long page at a time, with the section names as tabs. Remembers the last tab per page. */
+export function Tabs({ id, children }: { id: string; children: ReactNode }) {
+  const tabs = Children.toArray(children).filter(isValidElement) as ReactElement<{ label: string; children: ReactNode }>[];
+  const key = `wise.tab.${id}`;
+  const [cur, setCur] = useState(() => { try { return sessionStorage.getItem(key) || ""; } catch { return ""; } });
+  if (tabs.length === 0) return null;
+  if (tabs.length === 1) return <>{tabs[0]}</>;
+  const idx = Math.max(0, tabs.findIndex((t) => t.props.label === cur));
+  const pick = (label: string) => { setCur(label); try { sessionStorage.setItem(key, label); } catch { /* private mode */ } };
+  return (
+    <>
+      <div className="subtabs" role="tablist">
+        {tabs.map((t, i) => (
+          <button key={t.props.label} type="button" role="tab" aria-selected={i === idx} className={i === idx ? "on" : ""} onClick={() => pick(t.props.label)}>{t.props.label}</button>
+        ))}
+      </div>
+      <div className="tab-panel" role="tabpanel" aria-label={tabs[idx].props.label}>{tabs[idx]}</div>
+    </>
+  );
 }

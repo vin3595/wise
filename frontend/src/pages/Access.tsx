@@ -11,6 +11,8 @@ export default function Access() {
   const [v, setV] = useState<View | null>(null);
   const [draft, setDraft] = useState<Record<string, string[]>>({});
   const [saved, setSaved] = useState<string | null>(null);
+  // Phones show one role at a time; the role buttons switch which column is shown.
+  const [focus, setFocus] = useState<string>("");
   const { busy, error, run } = useAction();
   const load = (x: View) => { setV(x); setDraft(Object.fromEntries(x.roles.map((r) => [r.role, r.perms]))); };
   useEffect(() => { api<View>("/tenant/roles").then(load); }, []);
@@ -28,16 +30,20 @@ export default function Access() {
     if (x) load(x);
     setSaved(`Saved. Staff see the change the next time their screen loads (within a few seconds).`);
   });
+  const shownRole = focus || v.roles.find((r) => r.editable)?.role || v.roles[0]?.role;
   const reset = (r: RoleRow) => { setSaved(null); setDraft((d) => ({ ...d, [r.role]: r.default })); };
   return (
     <div className="stack">
       <h1>Who can do what</h1>
       <p className="muted">Tick what each role may see and do. The owner always has everything. Items marked <span className="sens">careful</span> show money or change settings: think twice before giving them to counter staff.{!v.can_edit && " Only the owner can change this."}</p>
       <Card>
+        <div className="role-pick" role="group" aria-label="Role to show">
+          {v.roles.map((r) => <button key={r.role} type="button" className={`choice ${shownRole === r.role ? "on" : ""}`} aria-pressed={shownRole === r.role} onClick={() => setFocus(r.role)}>{r.label}</button>)}
+        </div>
         <div className="access-wrap">
           <table className="table access">
             <thead>
-              <tr><th>Permission</th>{v.roles.map((r) => <th key={r.role} className="c">{r.label}{r.editable && [...draft[r.role]].sort().join() !== [...r.default].sort().join() && <div><button className="link small" onClick={() => reset(r)} disabled={!v.can_edit}>Default</button></div>}</th>)}</tr>
+              <tr><th>Permission</th>{v.roles.map((r) => <th key={r.role} className={`c ${shownRole === r.role ? "" : "other"}`}>{r.label}{r.editable && [...draft[r.role]].sort().join() !== [...r.default].sort().join() && <div><button className="link small" onClick={() => reset(r)} disabled={!v.can_edit}>Default</button></div>}</th>)}</tr>
             </thead>
             <tbody>
               {groups.map(([g, list]) => [
@@ -48,7 +54,7 @@ export default function Access() {
                     {v.roles.map((r) => {
                       const on = draft[r.role].includes(p.key), def = r.default.includes(p.key);
                       return (
-                        <td key={r.role} className={`c ${on !== def ? "changed" : ""}`}>
+                        <td key={r.role} className={`c ${on !== def ? "changed" : ""} ${shownRole === r.role ? "" : "other"}`}>
                           <input type="checkbox" checked={on} disabled={!r.editable || !v.can_edit} onChange={() => toggle(r.role, p.key)}
                             aria-label={`${r.label}: ${p.label}`} />
                         </td>

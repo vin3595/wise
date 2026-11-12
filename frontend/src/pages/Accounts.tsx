@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, download } from "../api";
 import { useSession } from "../session";
 import type { Outlet } from "../types";
-import { Button, Card, ErrorText, Field, Input, Select, useAction } from "../ui";
+import { Button, Card, ErrorText, Field, Input, Select, useAction, Tab, Tabs } from "../ui";
 
 interface Acc { company_name: string; ledgers: Record<string, string>; defaults: Record<string, string> }
 const LABELS: [string, string][] = [
@@ -44,12 +44,12 @@ export default function Accounts() {
           {outlets.length > 1 && <Select value={outletId} onChange={(e) => setOutletId(e.target.value)} aria-label="Outlet"><option value="">All outlets</option>{outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select>}
         </div>
       </Card>
-      <div className="grid2 wide">
-        <Card title="Excel for the accountant">
+      <Tabs id="accounts">
+        <Tab label="Excel"><Card title="Excel for the accountant">
           <p className="muted">One workbook: every bill (sales register), GST by rate, HSN summary, day-wise money by payment mode, and the purchase register. Ready for GSTR-1 and GSTR-3B.</p>
           <Button disabled={busy} onClick={() => get(`/accounts/excel?${q}`, `wise-accounts-${d1}-to-${d2}.xlsx`)}>Download Excel</Button>
-        </Card>
-        <Card title="Tally Prime">
+        </Card></Tab>
+        <Tab label="Tally"><Card title="Tally Prime">
           <ol className="steps small">
             <li><strong>Once:</strong> download the ledgers file and import it in Tally (Gateway of Tally &gt; Import &gt; Masters). It creates Cash, UPI, Sales @5%, Output CGST and the rest.</li>
             <li><strong>Every month:</strong> download sales and purchases, then Import &gt; Transactions. Sales come in as one voucher per outlet per day; purchases one per supplier bill.</li>
@@ -60,11 +60,9 @@ export default function Accounts() {
             <Button disabled={busy} onClick={() => get(`/accounts/tally?kind=purchases&${q}`, `wise-tally-purchases-${d1}-to-${d2}.xml`)}>Purchase vouchers</Button>
           </div>
           <p className="muted small">B2B bills (with the customer's GSTIN) are inside the day's sales voucher; their details for GSTR-1 are in the Excel and in Reports &gt; B2B bills.</p>
-        </Card>
-      </div>
-      <ErrorText error={error} />
+        </Card></Tab>
       {acc && (
-        <Card title="Tally names" actions={can("tenant.settings") && !edit ? <Button variant="ghost" onClick={() => setEdit(true)}>Change names</Button> : undefined}>
+        <Tab label="Tally names"><Card title="Tally names" actions={can("tenant.settings") && !edit ? <Button variant="ghost" onClick={() => setEdit(true)}>Change names</Button> : undefined}>
           <p className="muted small">The files use these company and ledger names. Match them to what your accountant already has in Tally, so nothing is created twice.</p>
           {!edit ? (
             <table className="table"><tbody>
@@ -82,8 +80,10 @@ export default function Accounts() {
             </>
           )}
           {saved && <p className="ok">Saved.</p>}
-        </Card>
+        </Card></Tab>
       )}
+      </Tabs>
+      <ErrorText error={error} />
     </div>
   );
 }
