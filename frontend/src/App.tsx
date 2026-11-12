@@ -37,32 +37,33 @@ import Reports from "./pages/Reports";
 
 function Shell({ children }: { children: ReactNode }) {
   const { branding, me, can, signOut } = useSession();
-  const links: [string, string, boolean][] = [
-    ["/", "Home", can("tenant.settings") || can("menu.override")],
-    ["/orders", "Orders", can("kot.send")],
-    ["/kds", "Kitchen display", can("kds.view")],
-    ["/bills", "Bills", can("billing")],
-    ["/stock", "Stock", can("stock.count")],
-    ["/cash", "Cash", can("cash.expected")],
-    ["/day-close", "Day close", can("day.close")],
-    ["/customers", "Customers", can("loyalty.manage")],
-    ["/reports", "Reports", can("reports.view")],
-    ["/accounts", "Accounts", can("reports.view")],
+  // [path, label, allowed, group]. The group decides the heading the link sits under in the phone menu.
+  const links: [string, string, boolean, string][] = [
+    ["/", "Home", can("tenant.settings") || can("menu.override"), "Counter"],
+    ["/orders", "Orders", can("kot.send"), "Counter"],
+    ["/kds", "Kitchen display", can("kds.view"), "Counter"],
+    ["/bills", "Bills", can("billing"), "Counter"],
+    ["/cash", "Cash", can("cash.expected"), "Money"],
+    ["/day-close", "Day close", can("day.close"), "Money"],
+    ["/accounts", "Accounts", can("reports.view"), "Money"],
+    ["/reports", "Reports", can("reports.view"), "Business"],
+    ["/stock", "Stock", can("stock.count"), "Business"],
+    ["/customers", "Customers", can("loyalty.manage"), "Business"],
   ];
   // Set-up pages live on a second row, opened with "Setup", so the daily screens stay one tap away.
-  const setup: [string, string, boolean][] = [
-    ["/menu", "Menu", can("menu.manage")],
-    ["/outlet-menu", "Outlet menu", can("menu.override")],
-    ["/tax", "Tax", can("menu.manage")],
-    ["/kitchen", "Kitchen setup", can("menu.manage") || can("outlets.manage")],
-    ["/outlets", "Outlets", can("outlets.manage")],
-    ["/users", "Staff", can("users.manage")],
-    ["/access", "Who can do what", can("users.manage")],
-    ["/sms", "SMS", can("tenant.settings")],
-    ["/payments", "Payments", can("tenant.settings")],
-    ["/screens", "Screens", can("outlets.manage")],
-    ["/screen-ads", "Screen ads", can("ads.manage")],
-    ["/branding", "Branding", can("tenant.settings")],
+  const setup: [string, string, boolean, string][] = [
+    ["/menu", "Menu", can("menu.manage"), "Menu and tax"],
+    ["/outlet-menu", "Outlet menu", can("menu.override"), "Menu and tax"],
+    ["/tax", "Tax", can("menu.manage"), "Menu and tax"],
+    ["/kitchen", "Kitchen setup", can("menu.manage") || can("outlets.manage"), "Menu and tax"],
+    ["/outlets", "Outlets", can("outlets.manage"), "Outlets and screens"],
+    ["/screens", "Screens", can("outlets.manage"), "Outlets and screens"],
+    ["/screen-ads", "Screen ads", can("ads.manage"), "Outlets and screens"],
+    ["/users", "Staff", can("users.manage"), "People"],
+    ["/access", "Who can do what", can("users.manage"), "People"],
+    ["/payments", "Payments", can("tenant.settings"), "Business details"],
+    ["/sms", "SMS", can("tenant.settings"), "Business details"],
+    ["/branding", "Branding", can("tenant.settings"), "Business details"],
   ];
   const setupLinks = setup.filter(([, , show]) => show);
   const [showSetup, setShowSetup] = useState(() => { try { return localStorage.getItem("wise.nav_setup") === "1"; } catch { return false; } });
@@ -70,6 +71,14 @@ function Shell({ children }: { children: ReactNode }) {
   // Phones: the links live in a drawer opened from the top bar; it closes when a page opens.
   const [drawer, setDrawer] = useState(false);
   const shown = links.filter(([, , show]) => show);
+  // Setup in the phone menu stays folded unless you're already on a setup page.
+  const [drawerSetup, setDrawerSetup] = useState(false);
+  const setupOpen = drawerSetup || onSetup;
+  const grouped = (list: [string, string, boolean, string][]) => {
+    const out: [string, [string, string, boolean, string][]][] = [];
+    for (const l of list) { const g = out.find(([name]) => name === l[3]); if (g) g[1].push(l); else out.push([l[3], [l]]); }
+    return out;
+  };
   return (
     <div className={`shell ${me?.training ? "is-training" : ""}`}>
       {me?.training && <div className="training-bar" role="status">Training: practice only. Nothing here is a real bill, payment, stock or sale.</div>}
@@ -94,9 +103,31 @@ function Shell({ children }: { children: ReactNode }) {
           <nav id="app-drawer" className="drawer" aria-label="Menu"
             onClick={(e) => { e.stopPropagation(); if ((e.target as HTMLElement).closest("a")) setDrawer(false); }}>
             <p className="drawer-who">{me?.user.name} · {me?.user.role}</p>
-            {shown.map(([to, label]) => <NavLink key={to} to={to} end={to === "/"}>{label}</NavLink>)}
-            {setupLinks.length > 0 && <p className="drawer-head">Setup</p>}
-            {setupLinks.map(([to, label]) => <NavLink key={to} to={to}>{label}</NavLink>)}
+            {grouped(shown).map(([name, items]) => (
+              <section key={name} className="drawer-group" aria-label={name}>
+                {shown.length > 4 && <p className="drawer-head">{name}</p>}
+                {items.map(([to, label]) => <NavLink key={to} to={to} end={to === "/"}>{label}</NavLink>)}
+              </section>
+            ))}
+            {setupLinks.length > 0 && (
+              <section className="drawer-group drawer-setup">
+                <button className="drawer-fold" aria-expanded={setupOpen} aria-controls="drawer-setup-links"
+                  onClick={() => setDrawerSetup(!setupOpen)}>
+                  <span>Setup</span><span className="muted">{setupOpen ? "Hide" : `${setupLinks.length} pages`}</span>
+                  <span aria-hidden>{setupOpen ? "▴" : "▾"}</span>
+                </button>
+                {setupOpen && (
+                  <div id="drawer-setup-links">
+                    {grouped(setupLinks).map(([name, items]) => (
+                      <div key={name} className="drawer-sub">
+                        <p className="drawer-subhead">{name}</p>
+                        {items.map(([to, label]) => <NavLink key={to} to={to}>{label}</NavLink>)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
             <button className="link drawer-out" onClick={signOut}>Sign out</button>
           </nav>
         </div>

@@ -875,10 +875,19 @@ body.screen-dark .powered { color: #6f6684; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .drawer-back { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); z-index: 60; }
 .drawer { position: absolute; top: 0; left: 0; bottom: 0; width: min(82vw, 320px); background: var(--card); padding: 0.8rem 0.6rem 1.2rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.1rem; box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25); }
-.drawer a { padding: 0.8rem 0.9rem; border-radius: 10px; text-decoration: none; color: var(--ink); font-weight: 600; }
+.drawer a { display: block; padding: 0.62rem 0.9rem; border-radius: 10px; text-decoration: none; color: var(--ink); font-weight: 600; }
+.drawer-group { display: flex; flex-direction: column; gap: 0.05rem; padding-bottom: 0.35rem; }
+.drawer-group + .drawer-group { border-top: 1px solid var(--line); padding-top: 0.35rem; }
+.drawer-fold { display: flex; align-items: center; gap: 0.5rem; width: 100%; background: none; border: 0; padding: 0.7rem 0.9rem; border-radius: 10px; font: inherit; font-weight: 700; color: var(--ink); text-align: left; cursor: pointer; }
+.drawer-fold > span:first-child { flex: 1; }
+.drawer-fold .muted { font-weight: 500; font-size: 0.85rem; }
+.drawer-fold:focus-visible { outline: 2px solid var(--brand); }
+.drawer-sub { display: flex; flex-direction: column; padding-left: 0.5rem; }
+.drawer-sub a { font-weight: 500; padding: 0.5rem 0.9rem; }
+.drawer-subhead { margin: 0.5rem 0.9rem 0.1rem; font-size: 0.78rem; color: var(--ink-3); }
 .drawer a.active { background: var(--wash); color: var(--ink); box-shadow: inset 3px 0 0 var(--brand); }
 .drawer-who { margin: 0.2rem 0.9rem 0.6rem; color: var(--ink-2); font-size: 0.9rem; }
-.drawer-head { margin: 0.9rem 0.9rem 0.2rem; font-size: 0.8rem; font-weight: 700; color: var(--ink-3); }
+.drawer-head { margin: 0.4rem 0.9rem 0.1rem; font-size: 0.8rem; font-weight: 700; color: var(--ink-3); }
 .drawer-out { margin: 1rem 0.9rem 0; align-self: flex-start; }
 .cart-jump { display: none; }
 
