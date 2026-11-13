@@ -1057,3 +1057,44 @@ fieldset.field-group > legend { padding: 0; margin-bottom: 0.35rem; }
 .shell .pos .pay-modes .pay-mode { background: var(--card); color: var(--ink); border: 1px solid var(--line-2); border-radius: var(--r-s); padding: 0.4rem; font-size: 1rem; box-shadow: none; }
 .shell .pos .pay-modes .pay-mode.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); background: color-mix(in srgb, var(--ok, #18a058) 9%, var(--card)); }
 .shell .pos .pay-modes .pay-mode.pay-more { color: var(--ink-2); }
+
+/* ---------------------------------------------------------- Billing screen on phones
+   Categories in a narrow column on the left, items as a compact list, and Save & Print pinned to the bottom. */
+@media (max-width: 759px) {
+  .shell .pos.pp { padding-bottom: 5.2rem; }
+  .shell .pos.pp .pos-menu { display: grid; grid-template-columns: 6.6rem minmax(0, 1fr); grid-template-areas: "pend pend" "search search" "cats grid"; column-gap: 0.5rem; row-gap: 0.5rem; align-items: start; }
+  .shell .pos.pp .pos-menu > :first-child:not(.pos-search):not(.pos-cats):not(.pos-grid) { grid-area: pend; }
+  .shell .pos.pp .pos-search { grid-area: search; margin: 0; }
+  .shell .pos.pp .sold-hint { grid-column: 1 / -1; }
+  .shell .pos.pp .pos-cats { grid-area: cats; flex-direction: column; overflow: auto; padding: 0; gap: 0; position: sticky; top: 3.6rem; max-height: calc(100vh - 10rem);
+    background: var(--card); border: 1px solid var(--line-2); border-radius: 10px; }
+  .shell .pos.pp .pos-cats button { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; text-align: left; white-space: normal;
+    padding: 0.75rem 0.6rem; font-family: var(--font); font-size: 0.86rem; font-weight: 600; line-height: 1.2; color: var(--ink-2); margin: 0; }
+  .shell .pos.pp .pos-cats button:last-child { border-bottom: 0; }
+  .shell .pos.pp .pos-cats button.active { background: color-mix(in srgb, var(--cat, var(--brand)) 16%, var(--card)); color: var(--ink); box-shadow: inset 3px 0 0 var(--cat, var(--brand)); }
+  /* Items: one compact card per row, sizes as buttons side by side */
+  .shell .pos.pp .pos-grid, .shell .pos.pp.pos .pos-grid { grid-area: grid; grid-template-columns: 1fr; gap: 0.4rem; }
+  .shell .pos.pp .tile { border-radius: 8px; box-shadow: inset 3px 0 0 var(--cat); border: 1px solid var(--line-2); }
+  .shell .pos.pp .tile-main { padding: 0.55rem 0.6rem 0.45rem 0.8rem; min-height: 0; }
+  .shell .pos.pp .tile-name, .shell .pos .pp .tile-name { font-family: var(--font); font-size: 0.95rem; font-weight: 650; text-transform: none; line-height: 1.2; }
+  .shell .pos.pp .tile-price { font-family: var(--font); font-size: 0.9rem; font-weight: 650; color: var(--ink-2); }
+  .shell .pos.pp .tile-code { display: none; }
+  .shell .pos.pp .tile-sizes { border-top: 1px solid var(--line); grid-auto-flow: column; }
+  .shell .pos.pp .tile-sizes button + button { border-left: 1px solid var(--line); border-top: 0; }
+  .shell .pos.pp .tile-sizes button span { flex: none; border: 0; margin: 0; text-align: center; color: var(--ink-3); }
+  .shell .pos.pp .tile-sizes button { padding: 0.45rem 0.3rem; display: flex; flex-direction: row; gap: 0.35rem; justify-content: center; align-items: baseline; }
+  .shell .pos.pp .tile-sizes button span { font-size: 0.75rem; }
+  .shell .pos.pp .tile-sizes button strong { font-family: var(--font); font-size: 0.95rem; font-weight: 700; }
+  .shell .pos.pp .tile-addons { padding: 0.35rem; font-size: 0.8rem; }
+  .shell .pos.pp .tile-step button { padding: 0.35rem; }
+  /* Bottom bar: total and Save & Print */
+  .shell .pos.pp .cart-jump { position: fixed; left: 0.5rem; right: 0.5rem; bottom: calc(0.5rem + env(safe-area-inset-bottom)); display: flex; gap: 0.4rem; padding: 0.35rem;
+    width: auto; border-radius: 14px; background: #16181b; color: #fff; box-shadow: 0 6px 22px rgba(0,0,0,0.3); z-index: 40; cursor: default; }
+  .shell .pos.pp .cart-jump button { border: 0; font: inherit; cursor: pointer; border-radius: 10px; }
+  .shell .pos.pp .cj-view { flex: 1; display: flex; flex-direction: column; align-items: flex-start; background: none; color: #fff; padding: 0.3rem 0.6rem; text-align: left; }
+  .shell .pos.pp .cj-view span { font-size: 0.8rem; font-weight: 600; opacity: 0.85; }
+  .shell .pos.pp .cj-view strong { font-size: 1.35rem; font-weight: 800; }
+  .shell .pos.pp .cj-save { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--brand); color: #fff; padding: 0.5rem 1.1rem; font-weight: 800; font-size: 1.05rem; min-width: 9rem; }
+  .shell .pos.pp .cj-save small { font-size: 0.72rem; font-weight: 600; opacity: 0.9; }
+  .shell .pos.pp .cj-save:disabled { opacity: 0.5; }
+}

@@ -404,10 +404,18 @@ export default function Orders() {
         </div>
       </div>
 
+      {/* Phones: the bill stays one tap away at the bottom of the screen. */}
       {cart.length > 0 && (
-        <button className="cart-jump" onClick={() => document.querySelector(".pos-cart")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-          <span>{count} item{count === 1 ? "" : "s"}</span><strong>{formatPaise(total)}</strong><span>View bill ↓</span>
-        </button>
+        <div className="cart-jump">
+          <button className="cj-view" onClick={() => document.querySelector(".pos-cart")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+            <span>{count} item{count === 1 ? "" : "s"} · View bill</span><strong>{formatPaise(total)}</strong>
+          </button>
+          {canBill && !addingTo && (
+            <button className="cj-save" disabled={busy || !outletId || (payMode === "cash" && given > 0 && given < total)} onClick={saveAndPrint}>
+              Save &amp; Print<small>{payMode === "cash" ? "Cash" : payMode === "upi" ? "UPI" : "Card"}</small>
+            </button>
+          )}
+        </div>
       )}
       <aside className="pos-cart">
         {addingTo ? (
