@@ -52,7 +52,8 @@ export default function Orders() {
   const [quote, setQuote] = useState<number | null>(null);
   const [quoteFailed, setQuoteFailed] = useState(false);
   const [quoteTry, setQuoteTry] = useState(0);
-  const [payMode, setPayMode] = useState<PayMode | null>(null);
+  // Cash is picked from the start: tap items, then Save & Print. Two taps for a bill.
+  const [payMode, setPayMode] = useState<PayMode>("cash");
   const [tendered, setTendered] = useState("");
   const [addingTo, setAddingTo] = useState<Order | null>(null);
   const [picking, setPicking] = useState<OutletMenuItem | null>(null);
@@ -93,6 +94,14 @@ export default function Orders() {
   }, []);
   // "Sold out" mode: tapping a tile marks it sold out for today (or back on), for every counter, kiosk and QR menu.
   const [soldMode, setSoldMode] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  // The bill panel fills the screen below the top bars, so Save & Print never drops off the bottom.
+  useEffect(() => {
+    const fit = () => { const el = document.querySelector<HTMLElement>(".pos.pp"); if (el) el.style.setProperty("--pos-top", `${Math.max(0, el.getBoundingClientRect().top + window.scrollY)}px`); };
+    fit(); const t = setTimeout(fit, 400);
+    window.addEventListener("resize", fit);
+    return () => { clearTimeout(t); window.removeEventListener("resize", fit); };
+  });
   const toggleSold = async (item: OutletMenuItem, v: OutletMenuVariant) => {
     try {
       await api(`/menu/outlets/${outletId}/sold-out`, { body: { variant_ids: [v.variant_id], sold_out: !v.sold_out } });
@@ -129,7 +138,6 @@ export default function Orders() {
   const lines = () => cart.map((l) => ({ variant_id: l.variant.variant_id, qty: l.qty, addon_ids: l.addonIds }));
   // Total with GST for the pay buttons, refreshed as the cart changes.
   useEffect(() => {
-    setPayMode(null);
     if (!cart.length || !outletId) { setQuote(null); return; }
     if (!off.online) { setQuote(quoteOffline(cart)); return; }
     setQuote(null); setQuoteFailed(false);
@@ -167,7 +175,7 @@ export default function Orders() {
 
   function resetCart() {
     setCart([]); setTable(""); setCar(""); setCustomer(""); setNotes(""); setPhone(""); setDeclined(false); setOrderType(startType);
-    setAddingTo(null); setPayMode(null); setTendered(""); setRefresh((n) => n + 1); setLoy({ points_paise: 0, use_reward: false }); setLoyAmount(0);
+    setAddingTo(null); setPayMode("cash"); setTendered(""); setNoteOpen(false); setRefresh((n) => n + 1); setLoy({ points_paise: 0, use_reward: false }); setLoyAmount(0);
   }
 
   async function placeOrder(id = newId()): Promise<Order> {
@@ -261,6 +269,23 @@ export default function Orders() {
       }
     });
   }
+  /** The second tap: kitchen slip, bill and print in one go with the payment picked below the total. */
+  function saveAndPrint() {
+    if (!cart.length || busy) return;
+    if (payMode === "upi" && upiAuto.enabled && off.online) return upiAutoPay();
+    if (payMode === "card" && upiAuto.card_enabled && off.online && terminals.length) return cardAutoPay();
+    settle(payMode);
+  }
+  const keys = useRef({ saveAndPrint, kot: () => { if (cart.length && !busy && off.online) send(false); } });
+  keys.current = { saveAndPrint, kot: () => { if (cart.length && !busy && off.online) send(false); } };
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key === "F2" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) { e.preventDefault(); keys.current.saveAndPrint(); }
+      else if (e.key === "F4") { e.preventDefault(); keys.current.kot(); }
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []);
   const billed = (b: Bill) => { setBilling(null); setPrinting(b); setRefresh((n) => n + 1); };
 
   const total = quote ?? subtotal;
@@ -289,7 +314,7 @@ export default function Orders() {
       : upiReq.slip.lines.map((l) => ({ name: l.item_name + (short(l.variant_name) ? ` (${short(l.variant_name)})` : ""), qty: l.qty, amount_paise: l.gross_paise })),
     total_paise: cart.length ? total : upiReq?.slip ? upiReq.slip.total_paise : 0,
     discount_paise: cart.length ? loyAmount : upiReq?.slip ? upiReq.slip.discount_paise : 0,
-    ask: asking && canBill && cart.length > 0 && !declined && !upiReq && payMode === null,
+    ask: asking && canBill && cart.length > 0 && !declined && !upiReq,
     phone: cleanMobile(phone) || "", name: customer,
     qr: upiReq && upiReq.status === "waiting" && upiReq.upi_string ? { upi: upiReq.upi_string, amount_paise: upiReq.amount_paise }
       : payMode === "upi" && upiLink && cart.length ? { upi: upiLink, amount_paise: total } : null,
@@ -315,7 +340,7 @@ export default function Orders() {
     <>
     {can("billing") && <OfflineBar />}
     {outletId && can("billing") && off.online && <ShiftBar key={`${outletId}-${refresh}`} outletId={outletId} />}
-    <div className="pos">
+    <div className="pos pp">
       <div className="pos-menu">
         {outletId && off.online && <PendingOrders outletId={outletId} onBilled={billed} />}
         <div className="pos-search">
@@ -405,6 +430,7 @@ export default function Orders() {
             </div>
           </>
         )}
+        <div className="cart-head" aria-hidden><span>Items</span><span>Qty</span><span>Price</span></div>
         <ul className="cart-lines">
           {cart.map((l) => (
             <li key={l.key}>
@@ -420,77 +446,82 @@ export default function Orders() {
               <span className="price">{formatPaise(unitPrice(l) * l.qty)}</span>
             </li>
           ))}
-          {cart.length === 0 && <li className="cart-empty">Tap an item or a size to add it.</li>}
+          {cart.length === 0 && <li className="cart-empty">No items yet. Tap an item on the left.</li>}
         </ul>
-        {cart.length > 0 && !addingTo && <Input placeholder="Note for the kitchen" value={notes} onChange={(e) => setNotes(e.target.value)} />}
-        <div className="cart-total">
-          <span>{count ? `${count} item${count === 1 ? "" : "s"}` : "Total"}{count > 0 && <small>{quote !== null ? " incl. GST" : " + GST"}</small>}</span>
-          <strong className={count > 0 && quote === null ? "pending-total" : ""}>{formatPaise(total)}</strong>
-        </div>
+        {/* With nothing in the bill, the open orders (pay-later, tables) fill this space so they can be billed. */}
+        {outletId && off.online && cart.length === 0 && <ActiveOrders key={refresh} outletId={outletId} onAdd={(o) => { setAddingTo(o); setSent(null); }}
+          onBill={can("billing") ? setBilling : undefined} tables={outlet?.table_labels || []} />}
 
-        {canBill && cart.length > 0 && (
-          <div className="quickpay">
-            <div className="cust-row">
-              <Input inputMode="tel" placeholder="Customer mobile (optional)" aria-label="Customer mobile, optional" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </div>
+        <div className="cart-foot">
+        {cart.length > 0 && !addingTo && (noteOpen || notes
+          ? <Input placeholder="Note for the kitchen" aria-label="Note for the kitchen" value={notes} autoFocus={noteOpen && !notes} onChange={(e) => setNotes(e.target.value)} />
+          : <button className="link small add-note" onClick={() => setNoteOpen(true)}>+ Note for the kitchen</button>)}
+        {canBill && cart.length > 0 && !addingTo && (
+          <div className="cust-row">
+            <Input inputMode="tel" placeholder="Customer mobile (optional)" aria-label="Customer mobile, optional" value={phone} onChange={(e) => setPhone(e.target.value)} />
             {screenOn
               ? (!cleanMobile(phone) && (asking
                   ? <p className="muted small cs-status"><span className="dot-pulse" aria-hidden /> Customer is typing on their screen… <button className="link" onClick={() => setAsking(false)}>Stop</button></p>
-                  : <>
-                      {declined && <p className="muted small cs-status">Customer skipped the number.</p>}
-                      <button className="choice cs-ask" onClick={() => { setError(null); setDeclined(false); setAsking(true); }}>{declined ? "Ask again on their screen" : "Ask customer on their screen"}</button>
-                    </>))
+                  : <span className="cs-ask-wrap">
+                      {declined && <span className="muted small cs-status">Customer skipped the number.</span>}
+                      <button className="link small cs-ask" onClick={() => { setError(null); setDeclined(false); setAsking(true); }}>{declined ? "Ask again on their screen" : "Ask customer on their screen"}</button>
+                    </span>))
               : <button className="link small" onClick={openCustomerScreen}>Open customer screen</button>}
-            {!declined && off.online && <LoyaltyBox phone={phone} gross={subtotal} value={loy} onInfo={(l) => { rewardOf.current = l ? l.reward_paise : 0; }} onChange={(u) => {
-              setLoy(u);
-              // the reward is worth at most the bill; the server checks again when billing
-              setLoyAmount(u.points_paise + (u.use_reward ? Math.min(rewardOf.current, subtotal) : 0));
-            }} />}
-            {payMode === null && (
-              <p className="small pay-wait" role="status">
-                {quote !== null ? null : quoteFailed
-                  ? <>Couldn't work out the total with GST. <button className="link" onClick={() => setQuoteTry((n) => n + 1)}>Try again</button></>
-                  : "Adding GST to the total…"}
-              </p>
-            )}
-            {payMode === null ? (
-              <div className="pay-buttons">
-                <button className="pay pay-cash" disabled={busy || quote === null} onClick={() => setPayMode("cash")}>Cash</button>
-                <button className="pay pay-upi" disabled={busy || quote === null} onClick={() => (upiAuto.enabled && off.online ? upiAutoPay() : setPayMode("upi"))}>UPI</button>
-                <button className="pay pay-card" disabled={busy || quote === null} onClick={() => (upiAuto.card_enabled && off.online && terminals.length ? cardAutoPay() : settle("card"))}>Card</button>
-              </div>
-            ) : payMode === "cash" ? (
-              <div className="tender">
-                <div className="presets">
-                  {presets.map((p) => <button key={p} className={given === p ? "on" : ""} onClick={() => setTendered(String(p / 100))}>{p === total ? "Exact" : formatPaise(p)}</button>)}
-                </div>
-                <Input inputMode="decimal" placeholder="Cash received ₹" value={tendered} onChange={(e) => setTendered(e.target.value)} autoFocus />
-                {given > 0 && <p className={given >= total ? "change" : "error"}>{given >= total ? <>Return <strong>{formatPaise(given - total)}</strong></> : `Short by ${formatPaise(total - given)}`}</p>}
-                <div className="row">
-                  <Button className="grow" disabled={busy || (given > 0 && given < total)} onClick={() => settle("cash")}>Settle {formatPaise(total)} cash</Button>
-                  <button className="link" onClick={() => setPayMode(null)}>Back</button>
-                </div>
-              </div>
-            ) : (
-              <div className="tender upi">
-                {upiLink ? <QrImage text={upiLink} size={168} label="UPI QR for this bill" /> : <p className="muted">Add the outlet's UPI ID under Outlets to show a QR here.</p>}
-                <div className="row">
-                  <Button className="grow" disabled={busy} onClick={() => settle("upi")}>UPI received {formatPaise(total)}</Button>
-                  <button className="link" onClick={() => setPayMode(null)}>Back</button>
-                </div>
-              </div>
-            )}
+          </div>
+        )}
+        {canBill && cart.length > 0 && !declined && off.online && !addingTo && <LoyaltyBox phone={phone} gross={subtotal} value={loy} onInfo={(l) => { rewardOf.current = l ? l.reward_paise : 0; }} onChange={(u) => {
+          setLoy(u);
+          // the reward is worth at most the bill; the server checks again when billing
+          setLoyAmount(u.points_paise + (u.use_reward ? Math.min(rewardOf.current, subtotal) : 0));
+        }} />}
+        <div className="cart-total">
+          <span>{count ? `${count} item${count === 1 ? "" : "s"}` : "Total"}{count > 0 && <small>{quote !== null ? " incl. GST" : quoteFailed ? " + GST" : " adding GST…"}</small>}
+            {count > 0 && quote === null && quoteFailed && <> <button className="link small" onClick={() => setQuoteTry((n) => n + 1)}>Try again</button></>}</span>
+          <strong className={count > 0 && quote === null ? "pending-total" : ""}>{formatPaise(total)}</strong>
+        </div>
+
+        {canBill && !addingTo && (
+          <div className="pay-modes" role="radiogroup" aria-label="Payment">
+            {(["cash", "upi", "card"] as PayMode[]).map((m) => (
+              <button key={m} role="radio" aria-checked={payMode === m} className={`pay-mode pay-${m} ${payMode === m ? "on" : ""}`} onClick={() => setPayMode(m)}>
+                <span className="radio" aria-hidden />{m === "cash" ? "Cash" : m === "upi" ? "UPI" : "Card"}
+              </button>
+            ))}
+            <button className="pay-mode pay-more" disabled={busy || cart.length === 0 || !outletId || !off.online} onClick={() => send(true)}
+              title="Discount, split payment, pay later or a company bill">Other…</button>
+          </div>
+        )}
+        {canBill && cart.length > 0 && !addingTo && payMode === "cash" && (
+          <div className="tender">
+            <div className="presets">
+              {presets.filter((p) => p !== total).slice(0, 3).map((p) => <button key={p} className={given === p ? "on" : ""} onClick={() => setTendered(given === p ? "" : String(p / 100))}>{formatPaise(p)}</button>)}
+              <Input inputMode="decimal" placeholder="Cash given" aria-label="Cash given (optional)" value={tendered} onChange={(e) => setTendered(e.target.value)} />
+            </div>
+            {given > 0 && <p className={given >= total ? "change" : "error"}>{given >= total ? <>Return <strong>{formatPaise(given - total)}</strong></> : `Short by ${formatPaise(total - given)}`}</p>}
+          </div>
+        )}
+        {canBill && cart.length > 0 && !addingTo && payMode === "upi" && !(upiAuto.enabled && off.online) && (
+          <div className="tender upi">
+            {upiLink ? <QrImage text={upiLink} size={150} label="UPI QR for this bill" /> : <p className="muted small">Add the outlet's UPI ID under Outlets to show a QR here.</p>}
+            <p className="muted small">Print once the money shows on your phone.</p>
           </div>
         )}
         <ErrorText error={error} />
         <div className="send-row">
-          {!off.online && <p className="muted small grow">{canBill ? "Box not reachable: only Cash, UPI and Card bills for now. Discounts, split bills and pay-later come back when it answers." : "Box not reachable. Take the order on paper or send it to the billing counter."}</p>}
-          {off.online && <>
-          <Button variant={canBill && cart.length ? "ghost" : "primary"} className="grow" disabled={busy || cart.length === 0 || !outletId} onClick={() => send(false)}>
-            {addingTo ? "Send added items" : canBill ? "Send, pay later" : "Send to kitchen"}
-          </Button>
-          {canBill && <Button variant="ghost" disabled={busy || cart.length === 0 || !outletId} onClick={() => send(true)} title="Sends the order to the kitchen and opens the bill for discount, split or other payments">Send & open bill</Button>}
-          </>}
+          {!off.online && <p className="muted small grow">{canBill ? "Box not reachable: Cash, UPI and Card bills still work. Discounts, split bills and pay-later come back when it answers." : "Box not reachable. Take the order on paper or send it to the billing counter."}</p>}
+          {canBill && !addingTo && (
+            <Button className="save-print grow" disabled={busy || cart.length === 0 || !outletId || (payMode === "cash" && given > 0 && given < total)} onClick={saveAndPrint}
+              title="Sends the order to the kitchen, settles the bill and prints it (F2)">
+              Save &amp; Print{cart.length > 0 && <span className="sp-amt"> {formatPaise(total)}</span>}
+            </Button>
+          )}
+          {off.online && (
+            <Button variant={canBill && !addingTo ? "ghost" : "primary"} className={`kot-only ${canBill && !addingTo ? "" : "grow"}`} disabled={busy || cart.length === 0 || !outletId} onClick={() => send(false)}
+              title="Sends the order to the kitchen; bill it later from Open orders (F4)">
+              {addingTo ? "Send added items" : canBill ? "KOT" : "Send to kitchen"}
+            </Button>
+          )}
+        </div>
         </div>
         {offlineDone && cart.length === 0 && (
           <div className="sent">Bill <strong>{offlineDone.invoice_no}</strong>, token <strong>#{offlineDone.token_no}</strong> printed with its kitchen slips. Hand the slips to the kitchen.</div>
@@ -501,8 +532,6 @@ export default function Orders() {
               <>Token <strong>#{sent.token_no}</strong> sent to {sent.kots.filter((k) => k.status === "new").map((k) => k.prep_area_name).join(" and ")}</>}
           </div>
         )}
-        {outletId && off.online && <ActiveOrders key={refresh} outletId={outletId} onAdd={(o) => { setAddingTo(o); setSent(null); }}
-          onBill={can("billing") ? setBilling : undefined} tables={outlet?.table_labels || []} />}
       </aside>
 
       {picking && <VariantPicker item={picking} onClose={() => setPicking(null)} onPick={(v, a) => { addLine(picking, v, a); setPicking(null); }} />}
