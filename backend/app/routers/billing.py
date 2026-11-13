@@ -15,6 +15,7 @@ from ..core.kds import business_date
 from ..core.permissions import Perm, Role
 from ..deps import Auth, ensure_outlet_access, get_db, require
 from ..core.loyalty import check_use, reward
+from ..core import cash_purpose
 from ..models import Bill, CashMovement, Drawer, Kot, User, LoyaltySettings, Order, Outlet, Shift, Tenant
 from ..schemas import (
     BillCreate, BillOut, BillPreviewIn, BillPreviewOut, CancelIn, CashMoveIn, OrderOut, ShiftClose, ShiftOpen,
@@ -391,12 +392,32 @@ def cash_movement(shift_id: uuid.UUID, body: CashMoveIn, auth: Auth = Depends(re
     amount = total_paise(denoms) if denoms else body.amount_paise
     if amount <= 0:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Enter the amount, or count the notes and coins")
+    text = cash_purpose.describe(body.kind, body.purpose, body.category, body.handed, body.paid_to, body.reason)
     db.add(CashMovement(tenant_id=auth.tenant_id, shift_id=shift.id, kind=body.kind, amount_paise=amount, denoms=denoms,
-                        reason=body.reason.strip(), created_by=auth.user_id))
+                        reason=text, purpose=body.purpose, category=body.category, handed=body.handed, paid_to=body.paid_to,
+                        note=body.reason or None, created_by=auth.user_id))
     db.flush()
     audit.record(db, auth.tenant_id, auth.user_id, f"cash_{body.kind}", "shift", shift.id,
-                 after={"amount": amount, "denoms": denoms, "reason": body.reason})
+                 after={"amount": amount, "denoms": denoms, "purpose": body.purpose, "category": body.category,
+                        "handed": body.handed, "paid_to": body.paid_to, "reason": text})
     return shift_out(db, shift, blind=not _sees_cash(auth))
+
+
+@router.get("/cash/suggestions")
+def cash_suggestions(auth: Auth = Depends(require(Perm.billing)), db: Session = Depends(get_db)) -> dict:
+    """Expense categories (the usual ones plus any typed before) and names used before, for quick picking."""
+    used = lambda col, purpose: [v for (v,) in db.execute(  # noqa: E731
+        select(col).where(CashMovement.purpose == purpose, col.is_not(None)).group_by(col)
+        .order_by(func.max(CashMovement.created_at).desc()).limit(12))]
+    cats = list(cash_purpose.DEFAULT_CATEGORIES)
+    for c in used(CashMovement.category, "expense"):
+        if c not in cats:
+            cats.insert(len(cats) - 1, c)
+    owners = [v for (v,) in db.execute(select(CashMovement.paid_to).where(CashMovement.purpose == "drawing", CashMovement.handed == "owner",
+              CashMovement.paid_to.is_not(None)).group_by(CashMovement.paid_to).order_by(func.max(CashMovement.created_at).desc()).limit(8))]
+    banks = [v for (v,) in db.execute(select(CashMovement.paid_to).where(CashMovement.purpose == "drawing", CashMovement.handed == "bank",
+             CashMovement.paid_to.is_not(None)).group_by(CashMovement.paid_to).order_by(func.max(CashMovement.created_at).desc()).limit(8))]
+    return {"categories": cats, "owners": owners, "banks": banks, "suppliers": used(CashMovement.paid_to, "supplier")}
 
 
 @router.post("/shifts/{shift_id}/close", response_model=ShiftOut)

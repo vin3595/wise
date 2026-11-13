@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { queuedBills } from "../offline";
 import { formatPaise, inputToPaise } from "../money";
-import type { Shift } from "../types";
+import type { CashPurpose, Shift } from "../types";
 import { Button, ErrorText, Input, useAction } from "../ui";
 import CashCount, { denomTotal, type Denoms } from "./CashCount";
 
@@ -18,6 +18,12 @@ export default function ShiftBar({ outletId, onChange }: { outletId: string; onC
   const [amount, setAmount] = useState("");
   const [kind, setKind] = useState<"in" | "out">("out");
   const [reason, setReason] = useState("");
+  // What the cash is for. Out: expense (with category), drawing (to the owner or the bank), supplier, other.
+  const [purpose, setPurpose] = useState<CashPurpose>("expense");
+  const [category, setCategory] = useState("");
+  const [handed, setHanded] = useState<"owner" | "bank">("owner");
+  const [paidTo, setPaidTo] = useState("");
+  const [tips, setTips] = useState<{ categories: string[]; owners: string[]; banks: string[]; suppliers: string[] }>({ categories: [], owners: [], banks: [], suppliers: [] });
   const [closed, setClosed] = useState<Shift | null>(null);
   const [counts, setCounts] = useState<Denoms>({});
   const [byNote, setByNote] = useState(true);   // count note by note, or just type the total
@@ -40,6 +46,19 @@ export default function ShiftBar({ outletId, onChange }: { outletId: string; onC
     if (shift !== null) return;
     api<typeof drawers>(`/outlets/${outletId}/drawers`).then((d) => { setDrawers(d.filter((x) => x.is_active)); setDrawerId(null); }).catch(() => setDrawers([]));
   }, [shift, outletId]);
+
+  useEffect(() => {
+    if (mode !== "cash") return;
+    api<typeof tips>("/cash/suggestions").then(setTips).catch(() => undefined);
+  }, [mode]);
+  const pickKind = (k: "in" | "out") => { setKind(k); setPurpose(k === "out" ? "expense" : "topup"); setPaidTo(""); setCategory(""); };
+  const pickPurpose = (p: CashPurpose) => { setPurpose(p); setPaidTo(""); setHanded("owner"); };
+  const ready = moveTotal > 0 && (
+    purpose === "expense" ? category.trim().length > 0
+      : purpose === "drawing" || purpose === "supplier" ? paidTo.trim().length > 0
+        : purpose === "other" ? reason.trim().length >= 2 : true);
+  const saveLabel = { expense: "expense", drawing: handed === "bank" ? "bank deposit" : "drawing", supplier: "supplier payment", topup: "top-up", change: "change", other: kind === "out" ? "cash out" : "cash in" }[purpose];
+  const names = purpose === "drawing" ? (handed === "owner" ? tips.owners : tips.banks) : purpose === "supplier" ? tips.suppliers : [];
 
   if (shift === undefined) return null;
   if (closed) {
@@ -91,32 +110,73 @@ export default function ShiftBar({ outletId, onChange }: { outletId: string; onC
       <span>Shift open{shift.drawer_name ? ` · ${shift.drawer_name}` : ""} · {shift.bills} bills · {formatPaise(shift.sales_paise)}{shift.expected_cash_paise !== null && ` · cash in drawer ${formatPaise(shift.expected_cash_paise)}`}</span>
       {openNote && <span className="error">{openNote} <button className="link" onClick={() => setOpenNote(null)}>OK</button></span>}
       {mode === "none" && <>
-        <button className="link" onClick={() => setMode("cash")}>Cash in / out</button>
+        <button className="link" onClick={() => { pickKind("out"); setHanded("owner"); setMode("cash"); }}>Cash in / out</button>
         <button className="link" onClick={() => setMode("close")}>Close shift</button>
       </>}
       {mode === "cash" && (
         <form className="shift-close cash-move" onSubmit={(e) => {
           e.preventDefault();
           run(async () => {
-            const body = moveByNote ? { kind, denoms: moveCounts, reason } : { kind, amount_paise: inputToPaise(amount) ?? 0, reason };
+            const what = { purpose, category: purpose === "expense" ? category : null, handed: purpose === "drawing" ? handed : null,
+              paid_to: purpose === "drawing" || purpose === "supplier" ? paidTo : null, reason };
+            const body = moveByNote ? { kind, denoms: moveCounts, ...what } : { kind, amount_paise: inputToPaise(amount) ?? 0, ...what };
             await api(`/shifts/${shift.id}/cash`, { body });
-            setAmount(""); setReason(""); setMoveCounts({}); setMode("none");
+            setAmount(""); setReason(""); setMoveCounts({}); setCategory(""); setPaidTo(""); setMode("none");
             await load();
           });
         }}>
           <div className="shift-open-head">
             <div className="tabs mini">
-              <button type="button" className={kind === "out" ? "active" : ""} onClick={() => setKind("out")}>Out</button>
-              <button type="button" className={kind === "in" ? "active" : ""} onClick={() => setKind("in")}>In</button>
+              <button type="button" className={kind === "out" ? "active" : ""} onClick={() => pickKind("out")}>Out</button>
+              <button type="button" className={kind === "in" ? "active" : ""} onClick={() => pickKind("in")}>In</button>
             </div>
             <strong>{kind === "out" ? "Cash taken out of the drawer" : "Cash put into the drawer"}</strong>
+          </div>
+          <div className="chips cm-purpose" role="radiogroup" aria-label="What is it for">
+            {(kind === "out" ? [["expense", "Expense"], ["drawing", "Drawing"], ["supplier", "Paid to supplier"], ["other", "Other"]]
+              : [["topup", "Owner top-up"], ["change", "Change from bank"], ["other", "Other"]] as [CashPurpose, string][]).map(([p, l]) => (
+              <button key={p} type="button" role="radio" aria-checked={purpose === p} className={`choice ${purpose === p ? "on" : ""}`} onClick={() => pickPurpose(p as CashPurpose)}>{l}</button>
+            ))}
+          </div>
+          {purpose === "expense" && (
+            <div className="cm-field">
+              <span className="small muted">What for</span>
+              <div className="chips">
+                {tips.categories.map((c) => <button key={c} type="button" className={`choice ${category === c ? "on" : ""}`} onClick={() => setCategory(c)}>{c}</button>)}
+              </div>
+              {(category === "Other" || (category && !tips.categories.includes(category))) && (
+                <Input placeholder="Type the category, e.g. Printer paper" aria-label="Expense category" value={category === "Other" ? "" : category} onChange={(e) => setCategory(e.target.value)} />
+              )}
+            </div>
+          )}
+          {purpose === "drawing" && (
+            <div className="cm-field">
+              <div className="seg cm-handed">
+                <button type="button" className={handed === "owner" ? "active" : ""} onClick={() => { setHanded("owner"); setPaidTo(""); }}>Given to owner</button>
+                <button type="button" className={handed === "bank" ? "active" : ""} onClick={() => { setHanded("bank"); setPaidTo(""); }}>Deposited in bank</button>
+              </div>
+              <Input placeholder={handed === "owner" ? "Who took it, e.g. Vineet" : "Which bank, e.g. HDFC current account"} aria-label={handed === "owner" ? "Owner's name" : "Bank"}
+                value={paidTo} onChange={(e) => setPaidTo(e.target.value)} />
+            </div>
+          )}
+          {purpose === "supplier" && (
+            <div className="cm-field">
+              <Input placeholder="Supplier's name, e.g. Saras Dairy" aria-label="Supplier" value={paidTo} onChange={(e) => setPaidTo(e.target.value)} />
+            </div>
+          )}
+          {names.length > 0 && !paidTo && (
+            <div className="chips">{names.map((n) => <button key={n} type="button" className="choice small" onClick={() => setPaidTo(n)}>{n}</button>)}</div>
+          )}
+          <div className="shift-open-head">
+            <span className="small muted">Amount</span>
             <button type="button" className="link" onClick={() => setMoveByNote(!moveByNote)}>{moveByNote ? "Just type the total" : "Count note by note"}</button>
           </div>
           {moveByNote ? <CashCount value={moveCounts} onChange={setMoveCounts} />
-            : <Input inputMode="decimal" placeholder="₹" value={amount} onChange={(e) => setAmount(e.target.value)} />}
-          <Input placeholder={kind === "out" ? "Reason, e.g. milk purchase" : "Reason, e.g. change from the bank"} value={reason} onChange={(e) => setReason(e.target.value)} />
+            : <Input inputMode="decimal" placeholder="₹" aria-label="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />}
+          <Input placeholder={purpose === "other" ? (kind === "out" ? "What was it for? e.g. tip to delivery boy" : "Where did it come from?") : "Note (optional)"}
+            aria-label={purpose === "other" ? "Reason" : "Note"} value={reason} onChange={(e) => setReason(e.target.value)} />
           <div className="row">
-            <Button disabled={busy || moveTotal <= 0 || reason.trim().length < 2}>Save {kind === "out" ? "cash out" : "cash in"} of {formatPaise(moveTotal)}</Button>
+            <Button disabled={busy || !ready}>Save {saveLabel} of {formatPaise(moveTotal)}</Button>
             <button type="button" className="link" onClick={() => setMode("none")}>Cancel</button>
           </div>
         </form>

@@ -427,7 +427,8 @@ export interface Shift {
   opened_at: string;
   opened_by_name: string | null;
   opening_cash_paise: number;
-  movements?: { kind: "in" | "out"; amount_paise: number; denoms: Record<string, number> | null; reason: string; at: string | null; by?: string | null }[];
+  movements?: { kind: "in" | "out"; amount_paise: number; denoms: Record<string, number> | null; reason: string; at: string | null; by?: string | null;
+    purpose?: CashPurpose | null; category?: string | null; handed?: "owner" | "bank" | null; paid_to?: string | null }[];
   drawer_id?: string | null;
   drawer_name?: string | null;
   closed_by_name?: string | null;
@@ -461,3 +462,6 @@ export interface SelfOrderStatus {
 }
 
 export type UiTheme = "steel" | "board" | "irani" | "swiss" | "shake";
+
+/** What cash taken out of / put into a drawer was for. */
+export type CashPurpose = "expense" | "drawing" | "supplier" | "topup" | "change" | "other";

@@ -847,10 +847,45 @@ class ShiftOpen(BaseModel):
 
 
 class CashMoveIn(BaseModel):
+    """Cash taken out of / put into a drawer, and what it was for.
+
+    Out: expense (category needed, no limit), drawing (handed to the owner or deposited in the bank, with
+    who / which bank), supplier (who was paid), other (reason needed). In: topup, change, other (reason needed).
+    Old clients send only kind + reason; that is kept as 'other'."""
     kind: str = Field(pattern=r"^(in|out)$")
     amount_paise: int = Field(default=0, ge=0, le=100_000_000)
     denoms: dict[str, int] | None = None     # notes and coins taken out / put in; the total is worked out from them
-    reason: str = Field(min_length=2, max_length=120)
+    purpose: str = "other"
+    category: str | None = Field(default=None, max_length=40)
+    handed: str | None = None                # drawings: owner | bank
+    paid_to: str | None = Field(default=None, max_length=80)
+    reason: str = Field(default="", max_length=120)
+
+    @model_validator(mode="after")
+    def _purpose_fits(self) -> "CashMoveIn":
+        from .core import cash_purpose as cp
+        allowed = cp.OUT if self.kind == "out" else cp.IN
+        if self.purpose not in allowed:
+            raise ValueError(f"Cash {self.kind} can be: {', '.join(allowed)}")
+        self.category = (self.category or "").strip() or None
+        self.paid_to = (self.paid_to or "").strip() or None
+        self.reason = self.reason.strip()
+        if self.purpose == "expense" and not self.category:
+            raise ValueError("Pick what the expense was for")
+        if self.purpose == "drawing":
+            if self.handed not in cp.HANDED:
+                raise ValueError("Say whether the cash was given to the owner or deposited in the bank")
+            if not self.paid_to:
+                raise ValueError("Write who took the cash" if self.handed == "owner" else "Write which bank it was deposited in")
+        else:
+            self.handed = None
+        if self.purpose == "supplier" and not self.paid_to:
+            raise ValueError("Write which supplier was paid")
+        if self.purpose == "other" and len(self.reason) < 2:
+            raise ValueError("Write what the cash was for")
+        if self.purpose != "expense":
+            self.category = None
+        return self
 
 
 class ShiftClose(BaseModel):

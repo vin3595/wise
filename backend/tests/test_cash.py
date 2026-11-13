@@ -27,3 +27,40 @@ def test_difference_and_tolerance():
     assert difference(100000, 95000) == -5000 and describe_difference(-5000) == "Rs 50 short"
     assert difference(100000, 100500, tolerance=1000) is None
     assert describe_difference(250) == "Rs 2.50 extra"
+
+
+# ---------------------------------------------------------------- what the cash was for
+
+import pytest
+from pydantic import ValidationError
+
+from app.core import cash_purpose as cp
+from app.schemas import CashMoveIn
+
+
+def test_expense_needs_a_category_and_has_no_limit():
+    m = CashMoveIn(kind="out", amount_paise=5_000_000, purpose="expense", category="Milk")
+    assert m.category == "Milk" and m.handed is None
+    with pytest.raises(ValidationError):
+        CashMoveIn(kind="out", amount_paise=100, purpose="expense")
+
+
+def test_drawing_says_owner_or_bank_and_who():
+    m = CashMoveIn(kind="out", amount_paise=500000, purpose="drawing", handed="bank", paid_to="HDFC")
+    assert cp.describe("out", m.purpose, m.category, m.handed, m.paid_to, m.reason) == "Drawing: deposited in bank: HDFC"
+    m = CashMoveIn(kind="out", amount_paise=500000, purpose="drawing", handed="owner", paid_to="Vineet", reason="for rent")
+    assert cp.describe("out", m.purpose, m.category, m.handed, m.paid_to, m.reason) == "Drawing: given to owner: Vineet (for rent)"
+    for bad in ({"handed": None, "paid_to": "Vineet"}, {"handed": "owner", "paid_to": " "}, {"handed": "friend", "paid_to": "X"}):
+        with pytest.raises(ValidationError):
+            CashMoveIn(kind="out", amount_paise=100, purpose="drawing", **bad)
+
+
+def test_old_clients_still_work_and_in_has_its_own_purposes():
+    m = CashMoveIn(kind="out", amount_paise=100, reason="milk purchase")
+    assert m.purpose == "other"
+    with pytest.raises(ValidationError):
+        CashMoveIn(kind="out", amount_paise=100, reason="")
+    with pytest.raises(ValidationError):
+        CashMoveIn(kind="in", amount_paise=100, purpose="drawing", handed="owner", paid_to="V")
+    assert CashMoveIn(kind="in", amount_paise=100, purpose="topup").purpose == "topup"
+    assert cp.type_label("in", "change", None) == "Change from bank"

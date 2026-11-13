@@ -264,6 +264,54 @@ def dues(c: Ctx) -> Table:
 
 # ------------------------------------------------------------------ staff and shifts
 
+def _cash_moves(c: Ctx):
+    """Cash in / out of every drawer in the dates, oldest first, with outlet, drawer and cashier."""
+    from ..models import Drawer
+    day = func.date(ist(CashMovement.created_at))
+    return c.rows(select(CashMovement, Shift.outlet_id, Shift.drawer_id).join(Shift, Shift.id == CashMovement.shift_id)
+                  .where(Shift.outlet_id.in_(c.outlets), day >= c.d1, day <= c.d2).order_by(CashMovement.created_at)), \
+        {d.id: d.name for d in c.db.scalars(select(Drawer))}, {o.id: o.name for o in c.db.scalars(select(Outlet))}
+
+
+@report("expenses", "Payments", "Expenses and drawings (cash out)")
+def expenses(c: Ctx) -> Table:
+    t = Table("Expenses and drawings", [
+        Col("at", "When", "datetime"), Col("outlet", "Outlet"), Col("drawer", "Drawer"), Col("cashier", "Cashier"),
+        Col("type", "Type"), Col("detail", "Category / given to"), Col("note", "Note"), Col("amount_paise", "Amount", "money", True)],
+        note="Every cash taken out of a drawer. Drawings are cash handed to the owner or deposited in the bank by the cashier. "
+             "The summary report shows totals by category.")
+    from ..core.cash_purpose import type_label
+    rows, drawers, outlets = _cash_moves(c)
+    names = c.names()
+    for m, oid, did in rows:
+        if m.kind != "out":
+            continue
+        t.rows.append({"at": m.created_at.isoformat(), "outlet": outlets.get(oid, ""), "drawer": drawers.get(did, ""),
+                       "cashier": names.get(m.created_by, "?"), "type": type_label(m.kind, m.purpose, m.handed),
+                       "detail": (m.category if m.purpose == "expense" else m.paid_to) or "",
+                       "note": (m.note or "") if m.purpose else m.reason, "amount_paise": m.amount_paise})
+    return t
+
+
+@report("cash_summary", "Payments", "Cash out summary (by category)")
+def cash_summary(c: Ctx) -> Table:
+    t = Table("Cash out and in by type", [
+        Col("type", "Type"), Col("detail", "Category / given to"), Col("count", "Times", "int", True),
+        Col("out_paise", "Taken out", "money", True), Col("in_paise", "Put in", "money", True)],
+        note="Expenses by category, drawings by who took them or which bank, and cash put into drawers.")
+    from ..core.cash_purpose import type_label
+    rows, _, _ = _cash_moves(c)
+    agg: dict[tuple[str, str], list[int]] = {}
+    for m, _o, _d in rows:
+        key = (type_label(m.kind, m.purpose, m.handed), (m.category if m.purpose == "expense" else m.paid_to) or "")
+        a = agg.setdefault(key, [0, 0, 0])
+        a[0] += 1
+        a[1 if m.kind == "out" else 2] += m.amount_paise
+    for (ty, de), (n, o, i) in sorted(agg.items(), key=lambda kv: (-kv[1][1], kv[0])):
+        t.rows.append({"type": ty, "detail": de, "count": n, "out_paise": o, "in_paise": i})
+    return t
+
+
 @report("captains", "Staff", "Captain-wise (who took the order)")
 def captains(c: Ctx) -> Table:
     t = Table("Captain-wise sales", [

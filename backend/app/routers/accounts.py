@@ -10,6 +10,7 @@ import uuid
 from collections import defaultdict
 from datetime import date
 
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -22,6 +23,7 @@ from ..deps import Auth, get_db, require
 from ..models import AccountsSettings, Bill, BillLine, Outlet, Payment, Purchase, Supplier, Tenant
 from .reports import _outlets, _range
 
+IST = ZoneInfo("Asia/Kolkata")
 router = APIRouter(tags=["accounts"])
 MODES = ("cash", "upi", "card", "due", "complimentary")
 MODE_LABEL = {"cash": "Cash", "upi": "UPI", "card": "Card", "due": "Credit", "complimentary": "Complimentary"}
@@ -218,6 +220,21 @@ def excel_file(outlet_id: uuid.UUID | None = None, date_from: date | None = None
     sheet("Purchase register", [("Bill date", 11, False), ("Supplier", 20, False), ("Supplier GSTIN", 17, False), ("Bill no.", 14, False),
                                 ("Outlet", 14, False), ("Items", 7, False), ("Before GST", 12, True), ("GST", 11, True), ("Total", 12, True)], prow,
           "Supplier bills entered under Stock > Purchases. Check input GST against GSTR-2B.")
+    from ..core.cash_purpose import type_label
+    from ..models import CashMovement, Drawer, Shift, User
+    unames = {u.id: u.name for u in db.scalars(select(User))}
+    dnames = {d.id: d.name for d in db.scalars(select(Drawer))}
+    cday = func.date(func.timezone("Asia/Kolkata", CashMovement.created_at))
+    crow = []
+    for m, oid, did in db.execute(select(CashMovement, Shift.outlet_id, Shift.drawer_id).join(Shift, Shift.id == CashMovement.shift_id)
+                                  .where(Shift.outlet_id.in_(outlets), cday >= d1, cday <= d2).order_by(CashMovement.created_at)):
+        crow.append([m.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M"), onames.get(oid, ""), dnames.get(did, ""), unames.get(m.created_by, ""),
+                     type_label(m.kind, m.purpose, m.handed), (m.category if m.purpose == "expense" else m.paid_to) or "",
+                     (m.note or "") if m.purpose else m.reason, r(m.amount_paise) if m.kind == "out" else 0, r(m.amount_paise) if m.kind == "in" else 0])
+    sheet("Cash expenses & drawings", [("When", 16, False), ("Outlet", 14, False), ("Drawer", 10, False), ("Cashier", 14, False), ("Type", 26, False),
+                                       ("Category / given to", 20, False), ("Note", 24, False), ("Cash out", 12, True), ("Cash in", 12, True)], crow,
+          "Cash taken out of / put into the drawers. Post expenses to their expense ledgers, drawings given to the owner to the "
+          "Drawings (capital) account, and bank deposits as a contra entry to the bank.")
     del wb["Sheet"]
     buf = io.BytesIO()
     wb.save(buf)

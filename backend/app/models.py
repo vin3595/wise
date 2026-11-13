@@ -856,6 +856,12 @@ class CashMovement(Base):
     amount_paise: Mapped[int] = mapped_column(Integer, nullable=False)
     denoms: Mapped[dict | None] = mapped_column(JSONB)      # {"n500": 1, "c10": 2}, when counted note by note
     reason: Mapped[str] = mapped_column(String(120), nullable=False)
+    # What the cash was for. Out: expense | drawing | supplier | other. In: topup | change | other.
+    purpose: Mapped[str | None] = mapped_column(String(10))
+    category: Mapped[str | None] = mapped_column(String(40))      # expense category, e.g. Milk
+    handed: Mapped[str | None] = mapped_column(String(6))         # drawings: owner | bank
+    paid_to: Mapped[str | None] = mapped_column(String(80))       # owner's name, bank, or supplier
+    note: Mapped[str | None] = mapped_column(String(120))         # what the cashier typed, as typed
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     __table_args__ = (CheckConstraint("kind in ('in','out') and amount_paise > 0", name="ck_cash_movement"),)

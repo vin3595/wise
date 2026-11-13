@@ -177,6 +177,7 @@ def shift_out(db: Session, shift: Shift, blind: bool = False) -> ShiftOut:
         closed_by_name=(db.get(User, shift.closed_by).name if shift.closed_by and db.get(User, shift.closed_by) else None),
         opened_by_id=shift.opened_by,
         movements=[{"kind": m.kind, "amount_paise": m.amount_paise, "denoms": m.denoms, "reason": m.reason,
+                    "purpose": m.purpose, "category": m.category, "handed": m.handed, "paid_to": m.paid_to,
                     "at": m.created_at.isoformat() if m.created_at else None,
                     "by": (db.get(User, m.created_by).name if db.get(User, m.created_by) else None)}
                    for m in sorted(moves, key=lambda x: x.created_at or shift.opened_at)],

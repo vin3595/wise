@@ -1098,3 +1098,8 @@ fieldset.field-group > legend { padding: 0; margin-bottom: 0.35rem; }
   .shell .pos.pp .cj-save small { font-size: 0.72rem; font-weight: 600; opacity: 0.9; }
   .shell .pos.pp .cj-save:disabled { opacity: 0.5; }
 }
+.cash-move .chips { gap: 0.3rem; }
+.cash-move .cm-purpose { margin: 0.2rem 0; }
+.cash-move .cm-field { display: flex; flex-direction: column; gap: 0.4rem; }
+.cash-move .cm-field .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.cash-move .cm-handed { margin: 0; grid-template-columns: 1fr 1fr; }
